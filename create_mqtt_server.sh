@@ -30,6 +30,7 @@ sudo ufw allow 1883/tcp
 
 # Adding password and give rights
 sudo mosquitto_passwd -c -b /etc/mosquitto/passwd "$username" "$psw1"
+sudo chown mosquitto:mosquitto /etc/mosquitto/passwd
 sudo chmod 640 /etc/mosquitto/passwd
 
 # Add config for internet connections with password
@@ -37,14 +38,14 @@ echo "
 listener 1883
 allow_anonymous false
 password_file /etc/mosquitto/passwd
-" >> /etc/mosquitto/mosquitto.conf
+" >> /etc/mosquitto/conf.d/mqtt.conf
 
 # Restart service for applying changes
 sudo systemctl restart mosquitto
 
 # Useful commands:
 # Subscribe mqtt topic
-mosquitto_sub -h YOUR_SERVER_IP -p 1883 -u "your_user" -P "your_password" -t "topic_name"
+#mosquitto_sub -h YOUR_SERVER_IP -p 1883 -u "your_user" -P "your_password" -t "topic_name"
 
 # Publish message to topic
-mosquitto_pub -h YOUR_SERVER_IP -p 1883 -u "your_user" -P "your_password" -t "topic_name" -m "Message"
+#mosquitto_pub -h YOUR_SERVER_IP -p 1883 -u "your_user" -P "your_password" -t "topic_name" -m "Message"

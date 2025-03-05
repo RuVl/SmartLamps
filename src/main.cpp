@@ -1,38 +1,38 @@
+#include "config.h"
+
 #include <Arduino.h>
-#include <EEManager.h>
-#include <GyverPortal.h>
-#include <PubSubClient.h>
+#include <EncButton.h>
 
-#include "wifi.h"
-#include "mqtt.h"
+#include "WiFiSettings.h"
+#include "MQTTClient.h"
+#include "EffectController.h"
 
-struct LampData {
-    WiFiConfig wifi_config = wifi_config;
-} data;
+GyverDBFile db(&LittleFS, DB_PATH); // NOLINT(*-interfaces-global-init)
+SettingsAsyncWS settings("Settings", &db);
 
-EEManager memory(data);
-GyverPortal portal;
-
-WiFiClient espClient;
-PubSubClient client(espClient);
+AsyncMqttClient client;
+ButtonT<D3> btn(INPUT_PULLUP, HIGH);
 
 void setup() {
-    Serial.begin(9600); // запускаем сериал для отладки
+    Serial.begin(115200);
+    pinMode(LED_BUILTIN, OUTPUT);
 
-    // Initialize memory
-    EEPROM.begin(memory.blockSize());
-    memory.begin(0, 0);
+    // базу данных запускаем до подключения к точке
+#ifdef ESP32
+    LittleFS.begin(true); // format on fail
+#else
+    LittleFS.begin();
+#endif
+    db.begin();
 
-    // Initialize Wi-Fi
-    wifiInit(data.wifi_config, memory, portal);
-    wifiSetup();
+    WiFiSettings.begin(settings, db);
+    MQTTClient.begin(client, db);
 
-    // Initialize mqtt
-    setupMQTT(client);
+    // btn.init();
 }
 
 void loop() {
-    memory.tick(); // проверяем обновление настроек
-    portal.tick(); // пинаем портал
-    mqttTick();    // опрашиваем mqtt
-}
+    WiFiSettings.tick();
+    // EffectController.tick();
+    // btn.tick();
+ }
