@@ -1,7 +1,10 @@
 #include "WiFiSettings.h"
 
-#include <MQTTClient.h>
 #include <WiFiConnector.h>
+#include <MQTTClient.h>
+#include <EffectController.h>
+
+using namespace std::placeholders;
 
 WiFiSettingsClass& WiFiSettingsClass::instance() {
     static WiFiSettingsClass instance;
@@ -16,23 +19,23 @@ void WiFiSettingsClass::begin(SettingsAsyncWS& _settings, GyverDBFile& _db) {
     WiFi.mode(WIFI_AP_STA);
 
     settings->begin();
-    settings->onBuild(build);
+    settings->onBuild(std::bind(&WiFiSettingsClass::buildUI, this, _1));
 
-    db->init(kk::wifi_ssid, "");
-    db->init(kk::wifi_password, "");
-    db->init(kk::wifi_connected, false);
+    _db.init(wifi_ssid, "");
+    _db.init(wifi_password, "");
+    _db.init(wifi_connected, false);
 
     initConnector();
 }
 
-void WiFiSettingsClass::tick() {
+void WiFiSettingsClass::tick() const {
     WiFiConnector.tick();
     settings->tick(); // implicit db tick
 }
 
 void WiFiSettingsClass::initConnector() {
-    WiFiConnector.onConnect(onConnect);
-    WiFiConnector.onError(onError);
+    WiFiConnector.onConnect(std::bind(&WiFiSettingsClass::onConnect, this));
+    WiFiConnector.onError(std::bind(&WiFiSettingsClass::onError, this));
 
     // ======= AP =======
     WiFiConnector.closeAP(WIFI_CLOSE_AP);
@@ -47,48 +50,44 @@ void WiFiSettingsClass::initConnector() {
     LOG_LN(WiFi.softAPIP());
 
     // ======= STA =======
-    // если логин задан - подключаемся
-    const String ssid = db->get(kk::wifi_ssid);
-    if (ssid.length()) {
-        LOG_LN(sets::Logger::info() + "Connecting STA...");
-        WiFiConnector.connect(ssid, db->get(kk::wifi_password));
-    }
-    
-    WiFiSettings.settings->updater().update(logger_name, logger);
+    LOG_LN(sets::Logger::info() + "Connecting STA...");
+    WiFiConnector.connect(db->get(wifi_ssid), db->get(wifi_password));
+
+    settings->updater().update(logger_name, logger);
 }
 
 void WiFiSettingsClass::onConnect() {
-    instance().db->set(kk::wifi_connected, true);
+    db->set(wifi_connected, true);
 
     LOG(sets::Logger::info() + "Connected STA. IP: ");
     LOG_LN(WiFi.localIP());
 
     MQTTClient.reconnect();
-    WiFiSettings.settings->updater().update(logger_name, logger);
+    settings->updater().update(logger_name, logger);
 }
 
 void WiFiSettingsClass::onError() {
-    instance().db->set(kk::wifi_connected, false);
+    db->set(wifi_connected, false);
     LOG_LN(sets::Logger::error() + "Can't connect to STA.");
-    instance().settings->updater().update(logger_name, logger);
+    settings->updater().update(logger_name, logger);
 }
 
-void WiFiSettingsClass::build(sets::Builder& b) {
-    GyverDBFile *db = instance().db;
+void WiFiSettingsClass::buildUI(sets::Builder& b) {
     {
         sets::Menu _(b, "WiFi");
-        b.Input(kk::wifi_ssid, "SSID (only 2.4 GHz)");
-        b.Pass(kk::wifi_password, "Password");
-        b.LED(kk::wifi_connected, "Status");
+        b.Input(wifi_ssid, "SSID (only 2.4 GHz)");
+        b.Pass(wifi_password, "Password");
+        b.LED(wifi_connected, "Status");
 
         if (b.Button("Reconnect")) {
             LOG_LN(sets::Logger::info() + "Reconnecting STA...");
             db->update(); // сохраняем БД не дожидаясь таймаута
-            WiFiConnector.connect(db->get(kk::wifi_ssid), db->get(kk::wifi_password));
+            WiFiConnector.connect(db->get(wifi_ssid), db->get(wifi_password));
         }
 
         b.Log(logger_name, logger);
     }
 
-    MQTTClient.build(b);
+    MQTTClient.buildUI(b);
+    EffectController.buildUI(b);
 }

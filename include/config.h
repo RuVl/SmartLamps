@@ -12,7 +12,7 @@
 #define FASTLED_INTERNAL
 // #define FASTLED_OVERCLOCK 1.1       // Overclocks by 10%
 
-// ----- МАТРИЦА -----
+// ----- Matrix -----
 #define WIDTH 16                    // Ширина матрицы
 #define HEIGHT 16                   // Высота матрицы
 #define NUM_LEDS WIDTH * HEIGHT
@@ -28,14 +28,18 @@
 #define SEGMENTS 1                  // Диодов в одном "пикселе" (для создания матрицы из кусков ленты)
 
 // Optional
-#define LED_BRIGHTNESS 40           // Стандартная максимальная яркость (0-255)
-#define LED_MAX_AMPERAGE 3000       // Лимит по току в миллиамперах, автоматически управляет яркостью
+#define LED_BRIGHTNESS 10           // Стандартная максимальная яркость (0-255)
+#define LED_MAX_AMPERAGE 3750       // Лимит по току в миллиамперах, автоматически управляет яркостью
+// #define LED_MAX_AMPERAGE 200       // Лимит по току в миллиамперах, автоматически управляет яркостью
+
+// ----- Button -----
+#define BTN_PIN D2
 
 // ----- WiFi -----
 #define WIFI_CLOSE_AP false         // Выключать AP после подключения STA
 #define WIFI_CONNECTION_TIMEOUT 20
 #define WIFI_AP_NAME "RuVlamp"
-// #define WIFI_AP_PASSWORD "12345678"
+#define WIFI_AP_PASSWORD "12345678"
 
 // ----- MQTT -----
 #define MQTT_KEEPALIVE 15
@@ -43,24 +47,9 @@
 
 // ----- Database -----
 #define DB_PATH "/data.db"
-#include <GyverDB.h>
 
-DB_KEYS(
-    kk,
 
-    wifi_ssid,
-    wifi_password,
-    wifi_connected, // bool
-
-    mqtt_ip,
-    mqtt_port,
-    mqtt_user,
-    mqtt_password,
-    mqtt_topic,
-    mqtt_connected // bool
-)
-
-// ========== Logic ==========
+// ========== Other Logic ==========
 // ----- Logging -----
 #ifdef ENABLE_WEB_LOGGING
 #define LOG_WEB(x) logger.print(x)

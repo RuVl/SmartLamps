@@ -14,23 +14,31 @@ public:
     void operator=(WiFiSettingsClass const&) = delete;
 
     void begin(SettingsAsyncWS&, GyverDBFile&);
-    void tick();
+    void tick() const;
 
 private:
     WiFiSettingsClass() {}
 
-    static inline size_t logger_name = "wifi_logger"_h;
-    static inline sets::Logger logger{LOG_BUFFER_CAPACITY};
+    size_t logger_name = "wifi_logger"_h;
+    sets::Logger logger{LOG_BUFFER_CAPACITY};
 
     SettingsAsyncWS* settings = nullptr;
     GyverDBFile* db = nullptr;
 
     void initConnector();
 
-    static void onConnect();
-    static void onError();
+    void onConnect();
+    void onError();
 
-    static void build(sets::Builder&);
+    void buildUI(sets::Builder&);
+
+protected:
+    DB_KEYS(
+        kk,
+        wifi_ssid,
+        wifi_password,
+        wifi_connected
+    )
 
     friend MQTTClientClass;
 };

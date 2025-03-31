@@ -11,11 +11,10 @@ GyverDBFile db(&LittleFS, DB_PATH); // NOLINT(*-interfaces-global-init)
 SettingsAsyncWS settings("Settings", &db);
 
 AsyncMqttClient client;
-ButtonT<D3> btn(INPUT_PULLUP, HIGH);
+ButtonT<BTN_PIN> btn(INPUT_PULLUP, HIGH);
 
 void setup() {
-    Serial.begin(115200);
-    pinMode(LED_BUILTIN, OUTPUT);
+    Serial.begin(74880);
 
     // базу данных запускаем до подключения к точке
 #ifdef ESP32
@@ -25,14 +24,16 @@ void setup() {
 #endif
     db.begin();
 
+    EffectController.begin(db);
     WiFiSettings.begin(settings, db);
     MQTTClient.begin(client, db);
 
-    // btn.init();
+    btn.init();
 }
 
 void loop() {
     WiFiSettings.tick();
-    // EffectController.tick();
-    // btn.tick();
- }
+    EffectController.tick();
+
+    btn.tick();
+}

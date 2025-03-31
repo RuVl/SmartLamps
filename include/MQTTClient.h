@@ -18,20 +18,31 @@ public:
     void begin(AsyncMqttClient&, GyverDBFile& _db);
     void reconnect();
 
-    static void build(sets::Builder&);
+    void buildUI(sets::Builder&);
 
 private:
     MQTTClientClass() {}
 
-    static inline size_t logger_name = "mqtt_logger"_h;
-    static inline sets::Logger logger{LOG_BUFFER_CAPACITY};
+    size_t logger_name = "mqtt_logger"_h;
+    sets::Logger logger{LOG_BUFFER_CAPACITY};
 
     AsyncMqttClient* client = nullptr;
     GyverDBFile* db = nullptr;
 
-    static void onConnect(bool sessionPresent);
-    static void onDisconnect(AsyncMqttClientDisconnectReason);
-    static void onMessage(const char* topic, const char* payload, AsyncMqttClientMessageProperties, size_t len, size_t index, size_t total);
+    void onConnect(bool sessionPresent);
+    void onDisconnect(AsyncMqttClientDisconnectReason);
+    void onMessage(const char* topic, const char* payload, AsyncMqttClientMessageProperties, size_t len, size_t index, size_t total);
+
+protected:
+    DB_KEYS(
+        kk,
+        mqtt_ip,
+        mqtt_port,
+        mqtt_username,
+        mqtt_password,
+        mqtt_topic,
+        mqtt_connected
+    )
 };
 
 #define MQTTClient MQTTClientClass::instance()

@@ -1,12 +1,15 @@
 #ifndef EFFECTS_H
 #define EFFECTS_H
 
+#include <config.h>
 #include <FastLED.h>
-#include <GyverTimer.h>
+#include <GyverDBFile.h>
+#include <core/builder.h>
 
 class EffectBase {
 public:
-    explicit EffectBase(CRGB*);
+    explicit EffectBase(CRGB*, GyverDBFile*);
+
     virtual ~EffectBase() = default;
 
     virtual void update() = 0;
@@ -14,11 +17,16 @@ public:
     virtual void setBrightness(byte);
     virtual void setScale(byte);
 
+    virtual void buildUI(sets::Builder&);
+
     [[nodiscard]] byte getSpeed() const;
+
     [[nodiscard]] byte getBrightness() const;
 
 protected:
     CRGB* leds;
+    GyverDBFile* db;
+
     byte brightness = 50;
     byte speed = 30;
     byte scale = 40;
@@ -33,50 +41,62 @@ protected:
     void fadePixel(byte i, byte j, byte step) const;
 };
 
+
 class SparklesEffect final : public EffectBase {
 public:
-    explicit SparklesEffect(CRGB*);
+    explicit SparklesEffect(CRGB*, GyverDBFile*);
+
     void update() override;
 };
 
-class FireEffect final : public EffectBase {
+
+class Fire final : public EffectBase {
 public:
-    explicit FireEffect(CRGB*, bool = true);
+    explicit Fire(CRGB*, GyverDBFile*);
+
     void update() override;
+    void buildUI(sets::Builder&) override;
 
 private:
-    bool sparkles;
     unsigned char* line;
     int pcnt = 0;
 
     void generateLine() const;
     void shiftUp() const;
     void drawFrame(int pcnt) const;
+
+protected:
+    DB_KEYS(
+        kk,
+        fire_sparkles
+    );
 };
+
 
 class RainbowEffect final : public EffectBase {
 public:
-    enum Orientation {
+    enum Orientation : byte {
         Vertical,
         Horizontal,
     };
 
-    explicit RainbowEffect(CRGB*, Orientation=Vertical);
-    void update() override;
+    explicit RainbowEffect(CRGB*, GyverDBFile*);
 
-    Orientation orientation;
+    void update() override;
+    void buildUI(sets::Builder&) override;
 
 private:
     byte hue = 0;
 
     void rainbowVertical();
     void rainbowHorizontal();
-};
 
-class TestEffect final : public EffectBase {
-public:
-    explicit TestEffect(CRGB*);
-    void update() override;
+protected:
+    DB_KEYS(
+        kk,
+        rainbow_orientation,
+        rainbow_hue
+    );
 };
 
 #endif //EFFECTS_H
