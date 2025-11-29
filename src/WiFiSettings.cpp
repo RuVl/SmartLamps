@@ -21,6 +21,14 @@ void WiFiSettingsClass::begin(SettingsAsyncWS& _settings, GyverDBFile& _db) {
     settings->begin();
     settings->onBuild(std::bind(&WiFiSettingsClass::buildUI, this, _1));
 
+#ifdef ADMIN_PASSWORD
+    settings->setPass(ADMIN_PASSWORD);
+#endif
+#ifdef SLIDER_TIMEOUT
+    settings->config.sliderTout = SLIDER_TIMEOUT;
+#endif
+    settings->setProjectInfo("RuVl's Smart Lamp", "https://github.com/RuVl/SmartLamps");
+    
     _db.init(wifi_ssid, "");
     _db.init(wifi_password, "");
     _db.init(wifi_connected, false);
@@ -77,7 +85,7 @@ void WiFiSettingsClass::buildUI(sets::Builder& b) {
         sets::Menu _(b, "WiFi");
         b.Input(wifi_ssid, "SSID (only 2.4 GHz)");
         b.Pass(wifi_password, "Password");
-        b.LED(wifi_connected, "Status");
+        b.LED(wifi_connected, "Status", WiFiConnector.connected());
 
         if (b.Button("Reconnect")) {
             LOG_LN(sets::Logger::info() + "Reconnecting STA...");

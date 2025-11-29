@@ -9,6 +9,7 @@
 #define LOG_BUFFER_CAPACITY 1000    // Размер буффера с логами
 
 // ----- FastLED -----
+#define FASTLED_USE_PROGMEM 1 // просим библиотеку FASTLED экономить память контроллера на свои палитры
 #define FASTLED_INTERNAL
 // #define FASTLED_OVERCLOCK 1.1       // Overclocks by 10%
 
@@ -28,9 +29,7 @@
 #define SEGMENTS 1                  // Диодов в одном "пикселе" (для создания матрицы из кусков ленты)
 
 // Optional
-#define LED_BRIGHTNESS 10           // Стандартная максимальная яркость (0-255)
 #define LED_MAX_AMPERAGE 3750       // Лимит по току в миллиамперах, автоматически управляет яркостью
-// #define LED_MAX_AMPERAGE 200       // Лимит по току в миллиамперах, автоматически управляет яркостью
 
 // ----- Button -----
 #define BTN_PIN D2
@@ -45,11 +44,20 @@
 #define MQTT_KEEPALIVE 15
 #define MQTT_SOCKET_TIMEOUT 15
 
+// ----- Web -----
+#define ADMIN_PASSWORD "1234" // Password for the web panel
+// слишком частые апдейты крашат программу
+#define SLIDER_TIMEOUT 250 // Minimum time between updates
+
 // ----- Database -----
 #define DB_PATH "/data.db"
+// #define ATOMIC_FS_UPDATE
 
 
 // ========== Other Logic ==========
+// ----- LED -----
+#define GAMMA 1.5 // gamma-correction for brightness
+
 // ----- Logging -----
 #ifdef ENABLE_WEB_LOGGING
 #define LOG_WEB(x) logger.print(x)

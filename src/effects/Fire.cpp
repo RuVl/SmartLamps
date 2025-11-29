@@ -2,8 +2,6 @@
 
 #include <FastLED.h>
 
-#include "config.h"
-
 unsigned char matrixValue[8][16];
 //these values are substracetd from the generated values to give a shape to the animation
 const unsigned char valueMask[8][16] PROGMEM = {
@@ -30,17 +28,17 @@ const unsigned char hueMask[8][16] PROGMEM = {
     {0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0}
 };
 
-Fire::Fire(CRGB* _leds, GyverDBFile* _db) : EffectBase(_leds, _db) {
+FireEffect::FireEffect(CRGB* _leds, GyverDBFile* _db) : EffectBase(_leds, _db) {
     db->init(fire_sparkles, false);
+    db->init(fire_hue, 0);
 
     line = new unsigned char[WIDTH];
-    scale = 0;
 
     memset(matrixValue, 0, sizeof(matrixValue));
     generateLine();
 }
 
-void Fire::update() {
+void FireEffect::update() {
     if (pcnt >= 100) {
         shiftUp();
         generateLine();
@@ -50,17 +48,20 @@ void Fire::update() {
     pcnt += 30;
 }
 
-void Fire::buildUI(sets::Builder& b) {
-    b.Switch(fire_sparkles, "Sparkles");
+void FireEffect::buildUI(sets::Builder& b) {
+    if (b.Switch(fire_sparkles, "Sparkles")) {
+        FastLED.clear(true);
+    }
+    b.Slider(fire_hue, "Hue");
 }
 
-void Fire::generateLine() const {
+void FireEffect::generateLine() const {
     for (uint8_t x = 0; x < WIDTH; x++) {
         line[x] = random(64, 255);
     }
 }
 
-void Fire::shiftUp() const {
+void FireEffect::shiftUp() const {
     for (uint8_t y = HEIGHT - 1; y > 0; y--) {
         for (uint8_t x = 0; x < WIDTH; x++) {
             uint8_t newX = x;
@@ -77,8 +78,9 @@ void Fire::shiftUp() const {
     }
 }
 
-void Fire::drawFrame(const int pcnt) const {
+void FireEffect::drawFrame(const int pcnt) const {
     const bool sparkles = db->get(fire_sparkles);
+    const int hue = db->get(fire_hue);
 
     // Each row interpolates with the one before it
     for (unsigned char y = HEIGHT - 1; y > 0; y--) {
@@ -86,11 +88,11 @@ void Fire::drawFrame(const int pcnt) const {
             uint8_t newX = x;
             if (x > 15) newX = x - 15;
             if (y < 8) {
-                int nextv = static_cast<byte>(((100.0 - pcnt) * matrixValue[y][newX] + pcnt * matrixValue[y - 1][newX]) / 100.0)
+                int nextv = (byte)(((100.0 - pcnt) * matrixValue[y][newX] + pcnt * matrixValue[y - 1][newX]) / 100.0)
                     - pgm_read_byte(&valueMask[y][newX]);
 
                 const CRGB color = CHSV(
-                    static_cast<byte>(scale * 2.5) + pgm_read_byte(&hueMask[y][newX]), // H
+                    (byte)(hue * 2.5) + pgm_read_byte(&hueMask[y][newX]), // H
                     255, // S
                     max(0, nextv) // V
                 );
@@ -116,9 +118,9 @@ void Fire::drawFrame(const int pcnt) const {
         uint8_t newX = x;
         if (x > 15) newX = x - 15;
         const CRGB color = CHSV(
-            static_cast<byte>(scale * 2.5) + pgm_read_byte(&hueMask[0][newX]), // H
+            (byte)(hue * 2.5) + pgm_read_byte(&hueMask[0][newX]), // H
             255, // S
-            static_cast<byte>(((100.0 - pcnt) * matrixValue[0][newX] + pcnt * line[newX]) / 100.0) // V
+            (byte)(((100.0 - pcnt) * matrixValue[0][newX] + pcnt * line[newX]) / 100.0) // V
         );
         leds[getPixelNumber(newX, 0)] = color;
     }

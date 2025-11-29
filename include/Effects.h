@@ -1,7 +1,8 @@
 #ifndef EFFECTS_H
 #define EFFECTS_H
 
-#include <config.h>
+#include "config.h"
+
 #include <FastLED.h>
 #include <GyverDBFile.h>
 #include <core/builder.h>
@@ -13,23 +14,15 @@ public:
     virtual ~EffectBase() = default;
 
     virtual void update() = 0;
-    virtual void setSpeed(byte);
-    virtual void setBrightness(byte);
-    virtual void setScale(byte);
-
     virtual void buildUI(sets::Builder&);
 
     [[nodiscard]] byte getSpeed() const;
-
-    [[nodiscard]] byte getBrightness() const;
 
 protected:
     CRGB* leds;
     GyverDBFile* db;
 
-    byte brightness = 50;
     byte speed = 30;
-    byte scale = 40;
 
     void fillAll(CRGB color) const;
     void drawPixelXY(byte x, byte y, CRGB color) const;
@@ -47,12 +40,23 @@ public:
     explicit SparklesEffect(CRGB*, GyverDBFile*);
 
     void update() override;
+    void buildUI(sets::Builder&) override;
+
+private:
+    static int8_t getFade(byte, byte);
+
+protected:
+    DB_KEYS(
+        kk,
+        sparkles_particles_count,
+        sparkles_fade
+    );
 };
 
 
-class Fire final : public EffectBase {
+class FireEffect final : public EffectBase {
 public:
-    explicit Fire(CRGB*, GyverDBFile*);
+    explicit FireEffect(CRGB*, GyverDBFile*);
 
     void update() override;
     void buildUI(sets::Builder&) override;
@@ -68,7 +72,8 @@ private:
 protected:
     DB_KEYS(
         kk,
-        fire_sparkles
+        fire_sparkles,
+        fire_hue
     );
 };
 
@@ -95,7 +100,7 @@ protected:
     DB_KEYS(
         kk,
         rainbow_orientation,
-        rainbow_hue
+        rainbow_speed
     );
 };
 

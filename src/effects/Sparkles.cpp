@@ -4,15 +4,29 @@
 
 #include "config.h"
 
-SparklesEffect::SparklesEffect(CRGB* _leds, GyverDBFile* _db): EffectBase(_leds, _db) {}
+SparklesEffect::SparklesEffect(CRGB* _leds, GyverDBFile* _db): EffectBase(_leds, _db) {
+    _db->init(sparkles_particles_count, 50);
+    _db->init(sparkles_fade, 10);
+}
 
 void SparklesEffect::update() {
-    for (byte i = 0; i < scale; i++) {
-        const byte x = random(0, WIDTH);
-        const byte y = random(0, HEIGHT);
-
-        if (getPixColorXY(x, y) == 0)
-            leds[getPixelNumber(x, y)] = CHSV(random(0, 255), 255, 255);
+    for (size_t i = 0; i < (size_t)db->get(sparkles_particles_count); i++) {
+        const int coord = random(WIDTH * HEIGHT);
+        if (!getPixColor(coord) || !random(3))
+            leds[coord] = CHSV(random(256), 200, 255);
     }
-    fader(70);
+
+    const int8_t fade = getFade(db->get(sparkles_particles_count), db->get(sparkles_fade));
+    fadeToBlackBy(leds, WIDTH * HEIGHT, fade);
+}
+
+int8_t SparklesEffect::getFade(const byte max, const byte min) {
+    // 1 < max < 100, 0 < min < 99
+    // Interpolate difference like gamma-correction
+    return (int8_t)(25 * powf((min + 1.) / max, 0.45) + .5);
+}
+
+void SparklesEffect::buildUI(sets::Builder& b) {
+    b.Slider2(sparkles_fade, sparkles_particles_count, "Particles",
+              0, 100, 1, "", nullptr, nullptr, sets::Colors::Pink);
 }

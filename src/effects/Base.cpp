@@ -55,29 +55,11 @@
 
 EffectBase::EffectBase(CRGB* _leds, GyverDBFile* _db): leds(_leds), db(_db) {}
 
-void EffectBase::setSpeed(const byte _speed) {
-    speed = _speed;
-}
-
-void EffectBase::setBrightness(const byte _brightness) {
-    brightness = _brightness;
-}
-
-void EffectBase::setScale(const byte _scale) {
-    scale = _scale;
-}
-
-void EffectBase::buildUI(sets::Builder& b) {}
+void EffectBase::buildUI(sets::Builder&) {}
 
 byte EffectBase::getSpeed() const {
     return speed;
 }
-
-byte EffectBase::getBrightness() const {
-    return brightness;
-}
-
-// служебные функции
 
 // залить все
 void EffectBase::fillAll(const CRGB color) const {
@@ -99,7 +81,7 @@ void EffectBase::drawPixelXY(const byte x, const byte y, const CRGB color) const
 uint32_t EffectBase::getPixColor(const int thisSegm) const {
     const int thisPixel = thisSegm * SEGMENTS;
     if (thisPixel < 0 || thisPixel > NUM_LEDS - 1) return 0;
-    return static_cast<uint32_t>(leds[thisPixel].r) << 16 | static_cast<long>(leds[thisPixel].g) << 8 | static_cast<long>(leds[thisPixel].b);
+    return (uint32_t)leds[thisPixel].r << 16 | (long)leds[thisPixel].g << 8 | (long)leds[thisPixel].b;
 }
 
 // функция получения цвета пикселя в матрице по его координатам
