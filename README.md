@@ -1,20 +1,48 @@
-# ESP8266 LED Lamp with WS2812B Effects
+# SmartLamp
 
-## Overview
+Прошивка настольной лампы на адресной матрице WS2812B 16×16: эффекты, сенсорная кнопка,
+веб-панель настроек и связь с парной лампой по MQTT.
 
-This project is an ESP8266-based smart lamp using a WS2812B addressable LED matrix. The firmware is written in C++ using PlatformIO and the
-Arduino framework. The lamp supports multiple dynamic lighting effects, which can be controlled via a sensor button, a web interface, or MQTT
-messages.
+Пара разнородна по железу и одинакова по возможностям: лампа A на ESP32-S3, лампа B на
+ESP8266, одно дерево исходников, один протокол.
 
-## Hardware Requirements
+## Сборка
 
-- **ESP8266/ESP32** - I use WEMOS d1 mini
-- **LED Matrix** - I use WS2812B 16x16
-- **Button** - I use ttp223
+```bash
+pio run -e esp32s3            # лампа A
+pio run -e d1_mini            # лампа B
+pio test -e native            # тесты ядра на компьютере
 
----
+pio run -e esp32s3 -t upload
+pio run -e esp32s3 -t uploadfs
+pio device monitor -b 115200
+```
 
-### Contributions
+## Документация
 
-Pull requests are welcome! Feel free to open an issue if you find a bug or have a feature request.
+| | |
+|---|---|
+| [Как написать эффект](docs/writing-effects.md) | разбор эталонного `Fire.cpp` |
+| [Архитектура](docs/architecture.md) | слои, конвейер кадра, что где выполняется |
+| [Железо](docs/hardware.md) | схема, питание, конденсаторы, распиновка |
+| [MQTT](docs/mqtt.md) | протокол, маячок, Home Assistant |
+| [Вторая лампа на ESP8266](docs/esp8266.md) | что меняется и чего там нет |
+| [Словарь](CONTEXT.md) | термины проекта |
+| [Решения](docs/adr/) | почему Arduino, почему арена, почему аппаратный вывод |
 
+## Железо
+
+ESP32-S3-DevKitC-1 N16R8 · WS2812B 16×16 · ttp223 · 74AHCT125 · ICS-43434 · 5 В / 4 А.
+Состав и схема — в [docs/hardware.md](docs/hardware.md).
+
+## Состояние
+
+Ветка `dev` — перестройка проекта. Готово ядро: геометрия матрицы, кадр, параметры,
+реестр эффектов, интерфейсы HAL, эталонный эффект и тесты на хосте. Дальше по плану —
+сеть и управление, затем пара, затем звук и голос.
+
+История прошлой версии — в ветке `main`.
+
+## Лицензия
+
+MIT, см. [LICENSE](LICENSE).

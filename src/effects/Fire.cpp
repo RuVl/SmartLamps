@@ -1,127 +1,85 @@
-#include "Effects.h"
+// Fire — the reference effect.
+//
+// Every convention a new effect should follow is visible here, and
+// docs/writing-effects.md walks through this file line by line. Nothing about
+// this effect is registered anywhere else: the REGISTER_EFFECT line at the
+// bottom is what puts it in the menu, in the database and on MQTT.
 
 #include <FastLED.h>
 
-unsigned char matrixValue[8][16];
-//these values are substracetd from the generated values to give a shape to the animation
-const unsigned char valueMask[8][16] PROGMEM = {
-    {32, 0, 0, 0, 0, 0, 0, 32, 32, 0, 0, 0, 0, 0, 0, 32},
-    {64, 0, 0, 0, 0, 0, 0, 64, 64, 0, 0, 0, 0, 0, 0, 64},
-    {96, 32, 0, 0, 0, 0, 32, 96, 96, 32, 0, 0, 0, 0, 32, 96},
-    {128, 64, 32, 0, 0, 32, 64, 128, 128, 64, 32, 0, 0, 32, 64, 128},
-    {160, 96, 64, 32, 32, 64, 96, 160, 160, 96, 64, 32, 32, 64, 96, 160},
-    {192, 128, 96, 64, 64, 96, 128, 192, 192, 128, 96, 64, 64, 96, 128, 192},
-    {255, 160, 128, 96, 96, 128, 160, 255, 255, 160, 128, 96, 96, 128, 160, 255},
-    {255, 192, 160, 128, 128, 160, 192, 255, 255, 192, 160, 128, 128, 160, 192, 255}
-};
+#include "core/Registry.h"
 
-//these are the hues for the fire,
-//should be between 0 (red) to about 25 (yellow)
-const unsigned char hueMask[8][16] PROGMEM = {
-    {1, 11, 19, 25, 25, 22, 11, 1, 1, 11, 19, 25, 25, 22, 11, 1},
-    {1, 8, 13, 19, 25, 19, 8, 1, 1, 8, 13, 19, 25, 19, 8, 1},
-    {1, 8, 13, 16, 19, 16, 8, 1, 1, 8, 13, 16, 19, 16, 8, 1},
-    {1, 5, 11, 13, 13, 13, 5, 1, 1, 5, 11, 13, 13, 13, 5, 1},
-    {1, 5, 11, 11, 11, 11, 5, 1, 1, 5, 11, 11, 11, 11, 5, 1},
-    {0, 1, 5, 8, 8, 5, 1, 0, 0, 1, 5, 8, 8, 5, 1, 0},
-    {0, 0, 1, 5, 5, 1, 0, 0, 0, 0, 1, 5, 5, 1, 0, 0},
-    {0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0}
-};
+namespace {
 
-FireEffect::FireEffect(CRGB* _leds, GyverDBFile* _db) : EffectBase(_leds, _db) {
-    db->init(fire_sparkles, false);
-    db->init(fire_hue, 0);
+struct Fire final : core::Effect {
+    // Declaration order is the order the sliders appear in the web panel.
+    //          owner, key,       label,            min, max, default
+    core::Param speed  {*this, "speed",   "Скорость",        1, 100,  40};
+    core::Param cooling{*this, "cooling", "Остывание",      10, 100,  55};
+    core::Param spark  {*this, "spark",   "Искры",          10, 200, 120};
+    core::Param hue    {*this, "hue",     "Оттенок пламени", 0,  60,  10};
 
-    line = new unsigned char[WIDTH];
-
-    memset(matrixValue, 0, sizeof(matrixValue));
-    generateLine();
-}
-
-void FireEffect::update() {
-    if (pcnt >= 100) {
-        shiftUp();
-        generateLine();
-        pcnt = 0;
+    void begin(core::Frame& f) override {
+        for (uint16_t i = 0; i < f.count(); ++i) heat_[i] = 0;
     }
-    drawFrame(pcnt);
-    pcnt += 30;
-}
 
-void FireEffect::buildUI(sets::Builder& b) {
-    if (b.Switch(fire_sparkles, "Sparkles")) {
-        FastLED.clear(true);
+    void render(core::Frame& f, uint16_t dtMs) override {
+        // Simulation runs on its own clock. The lamp renders at a fixed rate,
+        // so an effect must never assume "one call == one step" — it advances
+        // by the time that actually passed. This is why speed looks the same
+        // on the S3 and on the ESP8266.
+        const uint16_t stepMs = uint16_t(1000 / (10 + int(speed)));
+        accumulator_ += dtMs;
+        while (accumulator_ >= stepMs) {
+            accumulator_ -= stepMs;
+            advance(f);
+        }
+        draw(f);
     }
-    b.Slider(fire_hue, "Hue");
-}
 
-void FireEffect::generateLine() const {
-    for (uint8_t x = 0; x < WIDTH; x++) {
-        line[x] = random(64, 255);
-    }
-}
+private:
+    // One column of the matrix is one independent flame.
+    void advance(core::Frame& f) {
+        const uint8_t w = f.width();
+        const uint8_t h = f.height();
 
-void FireEffect::shiftUp() const {
-    for (uint8_t y = HEIGHT - 1; y > 0; y--) {
-        for (uint8_t x = 0; x < WIDTH; x++) {
-            uint8_t newX = x;
-            if (x > 15) newX = x - 15;
-            if (y > 7) continue;
-            matrixValue[y][newX] = matrixValue[y - 1][newX];
+        for (uint8_t x = 0; x < w; ++x) {
+            uint8_t* col = &heat_[uint16_t(x) * h];
+
+            // Cool every cell a little; the taller the matrix, the less each
+            // step may take, or the flame never reaches the top.
+            for (uint8_t y = 0; y < h; ++y) {
+                const uint8_t loss = random8(0, uint8_t((int(cooling) * 10) / h + 2));
+                col[y] = qsub8(col[y], loss);
+            }
+
+            // Heat drifts upwards, smeared across the two cells below.
+            for (uint8_t y = uint8_t(h - 1); y >= 2; --y)
+                col[y] = uint8_t((col[y - 1] + col[y - 2] + col[y - 2]) / 3);
+
+            // New embers at the base.
+            if (random8() < uint8_t(spark))
+                col[random8(2)] = qadd8(col[random8(2)], random8(160, 255));
         }
     }
 
-    for (uint8_t x = 0; x < WIDTH; x++) {
-        uint8_t newX = x;
-        if (x > 15) newX = x - 15;
-        matrixValue[0][newX] = line[newX];
-    }
-}
-
-void FireEffect::drawFrame(const int pcnt) const {
-    const bool sparkles = db->get(fire_sparkles);
-    const int hue = db->get(fire_hue);
-
-    // Each row interpolates with the one before it
-    for (unsigned char y = HEIGHT - 1; y > 0; y--) {
-        for (unsigned char x = 0; x < WIDTH; x++) {
-            uint8_t newX = x;
-            if (x > 15) newX = x - 15;
-            if (y < 8) {
-                int nextv = (byte)(((100.0 - pcnt) * matrixValue[y][newX] + pcnt * matrixValue[y - 1][newX]) / 100.0)
-                    - pgm_read_byte(&valueMask[y][newX]);
-
-                const CRGB color = CHSV(
-                    (byte)(hue * 2.5) + pgm_read_byte(&hueMask[y][newX]), // H
-                    255, // S
-                    max(0, nextv) // V
-                );
-
-                leds[getPixelNumber(x, y)] = color;
+    void draw(core::Frame& f) {
+        const uint8_t base = uint8_t(hue);
+        for (uint8_t x = 0; x < f.width(); ++x)
+            for (uint8_t y = 0; y < f.height(); ++y) {
+                const uint8_t t = heat_[uint16_t(x) * f.height() + y];
+                // HeatColor gives the classic black-red-yellow-white ramp;
+                // the hue parameter tints it towards green or violet flame.
+                CRGB c = HeatColor(t);
+                if (base != 0) c = blend(c, CHSV(base, 255, t), uint8_t(base * 4));
+                f.at(x, y) = c;
             }
-            else if (y == 8 && sparkles) {
-                if (random(0, 20) == 0 && getPixColorXY(x, y - 1) != 0) drawPixelXY(x, y, getPixColorXY(x, y - 1));
-                else drawPixelXY(x, y, 0);
-            }
-            else if (sparkles) {
-                // старая версия для яркости
-                if (getPixColorXY(x, y - 1) > 0) {
-                    drawPixelXY(x, y, getPixColorXY(x, y - 1));
-                }
-                else drawPixelXY(x, y, 0);
-            }
-        }
     }
 
-    // The first row interpolates with the "next" line
-    for (unsigned char x = 0; x < WIDTH; x++) {
-        uint8_t newX = x;
-        if (x > 15) newX = x - 15;
-        const CRGB color = CHSV(
-            (byte)(hue * 2.5) + pgm_read_byte(&hueMask[0][newX]), // H
-            255, // S
-            (byte)(((100.0 - pcnt) * matrixValue[0][newX] + pcnt * line[newX]) / 100.0) // V
-        );
-        leds[getPixelNumber(newX, 0)] = color;
-    }
-}
+    uint8_t heat_[MATRIX_WIDTH * MATRIX_HEIGHT] = {};
+    uint16_t accumulator_ = 0;
+};
+
+}  // namespace
+
+REGISTER_EFFECT(Fire, "Огонь", ::core::Tag::Ambient)

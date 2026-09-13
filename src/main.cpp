@@ -1,39 +1,18 @@
-#include "config.h"
+// SmartLamp v2.
+//
+// main() stays empty on purpose: everything is wired up in app/, so the entry
+// point never becomes the place where unrelated subsystems meet.
+//
+// Current state: the core (Matrix, Frame, Param, Effect, Registry) and the
+// HAL interfaces are in place, the implementations are not. See
+// docs/architecture.md for the plan and the order the layers land in.
 
 #include <Arduino.h>
-#include <EncButton.h>
-
-#include "WiFiSettings.h"
-#include "MQTTClient.h"
-#include "EffectController.h"
-
-GyverDBFile db(&LittleFS, DB_PATH); // NOLINT(*-interfaces-global-init)
-SettingsAsyncWS settings("Settings", &db);
-
-AsyncMqttClient client;
-ButtonT<BTN_PIN> btn(INPUT_PULLUP, HIGH);
 
 void setup() {
-    Serial.begin(74880);
-
-    // базу данных запускаем до подключения к точке
-#ifdef ESP32
-    LittleFS.begin(true); // format on fail
-#else
-    LittleFS.begin();
-#endif
-    db.begin();
-
-    EffectController.begin(db);
-    WiFiSettings.begin(settings, db);
-    MQTTClient.begin(client, db);
-
-    btn.init();
+    Serial.begin(115200);
+    Serial.println(F("SmartLamp v2 — core scaffolding"));
 }
 
 void loop() {
-    WiFiSettings.tick();
-    EffectController.tick();
-
-    btn.tick();
 }
