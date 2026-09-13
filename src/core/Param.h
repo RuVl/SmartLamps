@@ -22,20 +22,26 @@ public:
     Param(Effect& owner, const char* key, const char* label,
           int16_t min, int16_t max, int16_t def);
 
-    // Reads as a number: `if (hue > 128)`, `f.fade(speed)`.
-    operator int16_t() const { return value_.load(std::memory_order_relaxed); }
-    int16_t get() const { return value_.load(std::memory_order_relaxed); }
+    // Reads as a number: `if (hue > 128)`, `f.fade(speed)`. The implicit
+    // conversion is deliberate and is what makes effect code read like the
+    // arithmetic it is; see docs/writing-effects.md. A Param is a value with
+    // no ownership, so the usual danger of implicit conversion does not apply.
+    // NOLINTNEXTLINE(google-explicit-constructor,hicpp-explicit-conversions)
+    [[nodiscard]] operator int16_t() const { return value_.load(std::memory_order_relaxed); }
+
+    // Explicit spelling, for where the conversion would be ambiguous.
+    [[nodiscard]] int16_t get() const { return value_.load(std::memory_order_relaxed); }
 
     // Clamps into [min, max]. Returns true when the value actually changed.
     bool set(int16_t v);
 
-    const char* key() const { return key_; }
-    const char* label() const { return label_; }
-    int16_t min() const { return min_; }
-    int16_t max() const { return max_; }
-    int16_t def() const { return def_; }
+    [[nodiscard]] const char* key() const { return key_; }
+    [[nodiscard]] const char* label() const { return label_; }
+    [[nodiscard]] int16_t min() const { return min_; }
+    [[nodiscard]] int16_t max() const { return max_; }
+    [[nodiscard]] int16_t def() const { return def_; }
 
-    Param* next() const { return next_; }
+    [[nodiscard]] Param* next() const { return next_; }
 
 private:
     const char* key_;

@@ -28,7 +28,7 @@ struct Geometry {
     Corner corner;
     Direction direction;
 
-    constexpr uint16_t count() const { return uint16_t(width) * height; }
+    [[nodiscard]] constexpr uint16_t count() const { return uint16_t(width) * height; }
 };
 
 // Not every corner/direction pair describes a real matrix: the strip has to

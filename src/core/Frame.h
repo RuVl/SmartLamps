@@ -18,13 +18,13 @@ public:
     Frame(CRGB* pixels, const uint16_t* indexMap, const Geometry& geometry)
         : pixels_(pixels), map_(indexMap), geometry_(geometry) {}
 
-    uint8_t width() const { return geometry_.width; }
-    uint8_t height() const { return geometry_.height; }
-    uint16_t count() const { return geometry_.count(); }
+    [[nodiscard]] uint8_t width() const { return geometry_.width; }
+    [[nodiscard]] uint8_t height() const { return geometry_.height; }
+    [[nodiscard]] uint16_t count() const { return geometry_.count(); }
 
     // Strip index of a matrix coordinate. Out-of-range coordinates clamp to
     // the last pixel rather than corrupting memory.
-    uint16_t xy(uint8_t x, uint8_t y) const {
+    [[nodiscard]] uint16_t xy(uint8_t x, uint8_t y) const {
         if (x >= geometry_.width || y >= geometry_.height) return count() - 1;
         return map_[uint16_t(y) * geometry_.width + x];
     }

@@ -26,7 +26,7 @@ public:
 
     // Head of the intrusive list of this effect's parameters, in declaration
     // order. Built by Param's constructor.
-    Param* params() const { return params_; }
+    [[nodiscard]] Param* params() const { return params_; }
 
 private:
     void addParam(Param* p);

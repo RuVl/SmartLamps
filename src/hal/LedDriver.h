@@ -23,7 +23,7 @@ public:
     virtual void show(uint8_t brightness) = 0;
 
     // True while the previous frame is still being clocked out.
-    virtual bool busy() const = 0;
+    [[nodiscard]] virtual bool busy() const = 0;
 };
 
 LedDriver& ledDriver();

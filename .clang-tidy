@@ -1,0 +1,40 @@
+# Inspection profile for the project. CLion and clangd both read this, so a
+# decision is recorded here once instead of being re-argued per warning.
+Checks: >
+  -*,
+  bugprone-*,
+  clang-analyzer-*,
+  modernize-*,
+  performance-*,
+  readability-*,
+  -modernize-deprecated-headers,
+  -modernize-use-trailing-return-type,
+  -modernize-avoid-c-arrays,
+  -readability-magic-numbers,
+  -readability-identifier-length,
+  -readability-braces-around-statements,
+  -bugprone-easily-swappable-parameters
+
+# Why the exclusions:
+#
+# modernize-deprecated-headers  <stdint.h> over <cstdint>. The project uses the
+#   unqualified names (uint16_t, not std::uint16_t) throughout, and <cstdint>
+#   only guarantees those inside namespace std — putting them in the global
+#   namespace is allowed, not required. <stdint.h> guarantees exactly what the
+#   code uses, and matches the Arduino headers it sits next to.
+#
+# modernize-use-trailing-return-type  Style preference, not a defect.
+#
+# modernize-avoid-c-arrays  The pixel buffer, index map and effect arena are
+#   deliberately raw arrays of known size. std::array buys nothing here and
+#   obscures what the memory layout is.
+#
+# readability-magic-numbers  Colour and timing constants read better inline
+#   than behind a name invented to satisfy a linter.
+#
+# readability-identifier-length  Rejects x, y, i in loops over a 16x16 matrix.
+#
+# bugprone-easily-swappable-parameters  Fires on every (x, y) pair.
+
+HeaderFilterRegex: '^src/'
+WarningsAsErrors: ''
