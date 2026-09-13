@@ -5,3 +5,5 @@ CMakeListsPrivate.txt
 .vscode/
 
 .env
+
+compile_commands.json

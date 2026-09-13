@@ -78,14 +78,14 @@ constexpr uint16_t xyToIndex(uint8_t x, uint8_t y, const Geometry& g) {
     }
 
     const bool forward = (g.type == MatrixType::Parallel) || (row % 2 == 0);
-    return uint16_t(row) * rowLen + (forward ? col : uint8_t(rowLen - col - 1));
+    return (uint16_t(row) * rowLen) + (forward ? col : uint8_t(rowLen - col - 1));
 }
 
 // Fills `out` with width*height entries. Call once at boot.
 inline void buildIndexMap(uint16_t* out, const Geometry& g) {
     for (uint8_t y = 0; y < g.height; ++y)
         for (uint8_t x = 0; x < g.width; ++x)
-            out[uint16_t(y) * g.width + x] = xyToIndex(x, y, g);
+            out[(uint16_t(y) * g.width) + x] = xyToIndex(x, y, g);
 }
 
 }  // namespace core

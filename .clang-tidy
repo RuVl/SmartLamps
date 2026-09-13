@@ -13,6 +13,10 @@ Checks: >
   -readability-magic-numbers,
   -readability-identifier-length,
   -readability-braces-around-statements,
+  -readability-uppercase-literal-suffix,
+  -readability-avoid-const-params-in-decls,
+  -modernize-avoid-c-style-cast,
+  -modernize-use-auto,
   -bugprone-easily-swappable-parameters
 
 # Why the exclusions:
@@ -35,6 +39,26 @@ Checks: >
 # readability-identifier-length  Rejects x, y, i in loops over a 16x16 matrix.
 #
 # bugprone-easily-swappable-parameters  Fires on every (x, y) pair.
+#
+# readability-uppercase-literal-suffix  1.5F instead of 1.5f. Pure noise.
+#
+# modernize-avoid-c-style-cast  Flags the functional form, uint8_t(x), as well
+#   as the C form, (uint8_t)x. The two are not equivalent: on a fundamental
+#   type the functional cast is exactly static_cast and cannot silently become
+#   reinterpret_cast or const_cast, which is the hazard the rule exists for. In
+#   dense pixel arithmetic uint8_t(h - y - 1) reads far better than
+#   static_cast<uint8_t>(h - y - 1). The project rule is therefore: functional
+#   casts on fundamental types are fine, C-style casts (T)x are not, and
+#   anything involving pointers or references uses a named C++ cast.
+#
+# modernize-use-auto  Wants `auto y = uint8_t(h - 1)` for loop counters. In
+#   firmware the exact width of a counter is part of the meaning, and hiding it
+#   behind auto makes overflow behaviour harder to see, not easier.
+#
+# readability-avoid-const-params-in-decls  This check and CLion's "Parameter
+#   can be made const" inspection want opposite things. Top-level const on a
+#   by-value parameter changes nothing for the caller, so the project leaves it
+#   off and keeps declarations short.
 
 HeaderFilterRegex: '^src/'
 WarningsAsErrors: ''

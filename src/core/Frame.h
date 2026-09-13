@@ -26,23 +26,26 @@ public:
     // the last pixel rather than corrupting memory.
     [[nodiscard]] uint16_t xy(uint8_t x, uint8_t y) const {
         if (x >= geometry_.width || y >= geometry_.height) return count() - 1;
-        return map_[uint16_t(y) * geometry_.width + x];
+        return map_[(uint16_t(y) * geometry_.width) + x];
     }
 
-    CRGB& at(uint8_t x, uint8_t y) { return pixels_[xy(x, y)]; }
-    const CRGB& at(uint8_t x, uint8_t y) const { return pixels_[xy(x, y)]; }
+    [[nodiscard]] CRGB& at(uint8_t x, uint8_t y) const { return pixels_[xy(x, y)]; }
 
     // Linear access, for effects that do not care about geometry.
-    CRGB& operator[](uint16_t i) { return pixels_[i < count() ? i : count() - 1]; }
+    [[nodiscard]] CRGB& operator[](uint16_t i) const {
+        return pixels_[i < count() ? i : count() - 1];
+    }
 
-    CRGB* raw() { return pixels_; }
+    [[nodiscard]] CRGB* raw() const { return pixels_; }
 
-    void clear() { fill(CRGB::Black); }
-    void fill(CRGB color) { fill_solid(pixels_, count(), color); }
-    void fade(uint8_t amount) { fadeToBlackBy(pixels_, count(), amount); }
+    // These are const because a Frame is a view: they change the pixels it
+    // refers to, not the Frame itself — the same rule std::span follows.
+    void clear() const { fill(CRGB::Black); }
+    void fill(CRGB color) const { fill_solid(pixels_, count(), color); }
+    void fade(uint8_t amount) const { fadeToBlackBy(pixels_, count(), amount); }
 
-    // Scales the whole frame, used by the cross-fade between effects.
-    void scale(uint8_t factor) { nscale8(pixels_, count(), factor); }
+    // Scales the whole frame, used when fading between effects.
+    void scale(uint8_t factor) const { nscale8(pixels_, count(), factor); }
 
 private:
     CRGB* pixels_;

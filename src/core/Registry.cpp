@@ -14,7 +14,7 @@ EffectInfo*& listHead() {
 
 }  // namespace
 
-void Registry::add(EffectInfo& info) {
+void Registry::add(EffectInfo& info) noexcept {
     // Append, so the catalogue keeps link order and the UI list is stable.
     EffectInfo** slot = &listHead();
     while (*slot != nullptr) slot = &(*slot)->next;

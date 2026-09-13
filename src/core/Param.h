@@ -33,6 +33,10 @@ public:
     [[nodiscard]] int16_t get() const { return value_.load(std::memory_order_relaxed); }
 
     // Clamps into [min, max]. Returns true when the value actually changed.
+    // Not const, although the compiler would allow it: std::atomic::store is
+    // const-qualified, but changing a parameter's value is not a const
+    // operation on the parameter in any sense a reader would recognise.
+    // NOLINTNEXTLINE(readability-make-member-function-const)
     bool set(int16_t v);
 
     [[nodiscard]] const char* key() const { return key_; }

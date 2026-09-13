@@ -44,7 +44,7 @@ private:
         const uint8_t h = f.height();
 
         for (uint8_t x = 0; x < w; ++x) {
-            uint8_t* col = &heat_[uint16_t(x) * h];
+            uint8_t* col = &heat_[size_t(x) * h];
 
             // Cool every cell a little; the taller the matrix, the less each
             // step may take, or the flame never reaches the top.
@@ -67,7 +67,7 @@ private:
         const uint8_t base = uint8_t(hue);
         for (uint8_t x = 0; x < f.width(); ++x)
             for (uint8_t y = 0; y < f.height(); ++y) {
-                const uint8_t t = heat_[uint16_t(x) * f.height() + y];
+                const uint8_t t = heat_[(size_t(x) * f.height()) + y];
                 // HeatColor gives the classic black-red-yellow-white ramp;
                 // the hue parameter tints it towards green or violet flame.
                 CRGB c = HeatColor(t);

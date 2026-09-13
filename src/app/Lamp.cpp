@@ -1,7 +1,5 @@
 #include "Lamp.h"
 
-#include <Arduino.h>
-
 #include "core/PostFX.h"
 #include "hal/LedDriver.h"
 #include "hal/Storage.h"

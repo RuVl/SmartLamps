@@ -17,7 +17,7 @@ public:
     virtual ~Effect() = default;
 
     // Called once after construction, before the first render.
-    virtual void begin(Frame&) {}
+    virtual void begin(Frame& frame) { (void)frame; }
 
     // Draws one frame. `dtMs` is the time since the previous render, so the
     // animation runs at the same speed whatever the frame rate happens to be.

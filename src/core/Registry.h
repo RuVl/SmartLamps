@@ -35,7 +35,7 @@ struct EffectInfo {
 
 class Registry {
 public:
-    static void add(EffectInfo& info);
+    static void add(EffectInfo& info) noexcept;
     static EffectInfo* head();
     static EffectInfo* find(const char* name);
     static EffectInfo* at(uint16_t index);
@@ -43,7 +43,7 @@ public:
 };
 
 struct Registrar {
-    explicit Registrar(EffectInfo& info) { Registry::add(info); }
+    explicit Registrar(EffectInfo& info) noexcept { Registry::add(info); }
 };
 
 }  // namespace core
