@@ -63,13 +63,9 @@ namespace net {
 
         updateStatus();
 
-        if (app::lamp().consumeChanged()) {
-            mqtt::publishState();
-            web::pushState();
-        }
-        if (g_logDirty) {
-            g_logDirty = false;
-            web::pushLog();
-        }
+        // The panel is not pushed to: its widgets are bound to the database and
+        // Settings syncs them itself. MQTT is the only subscriber to changes.
+        if (app::lamp().consumeChanged()) mqtt::publishState();
+        if (g_logDirty && web::pushLog()) g_logDirty = false;
     }
 } // namespace net

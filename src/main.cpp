@@ -29,6 +29,8 @@ void setup() {
     return;
 #endif
     app::lamp().begin();
+    Serial.printf("state: power=%d brightness=%u effect=%s\n",
+                  app::lamp().isOn(), app::lamp().brightness(), app::lamp().effectName());
     net::begin();
 
 #ifdef LAMP_BOARD_ESP32S3

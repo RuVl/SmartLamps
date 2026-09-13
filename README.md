@@ -12,6 +12,7 @@ ESP8266, одно дерево исходников, один протокол.
 pio run -e esp32s3            # лампа A
 pio run -e d1_mini            # лампа B
 pio test -e native            # тесты ядра на компьютере
+pio run -e sim                # симулятор: .pio/build/sim/program --serve → localhost:8266
 
 pio run -e esp32s3 -t upload
 pio run -e esp32s3 -t uploadfs

@@ -1,12 +1,12 @@
 #pragma once
 
 namespace net::web {
-    void begin();
 
-    void tick();
+void begin();
+void tick();
 
-    // Pushes the lamp's current state into open panels without a page reload.
-    void pushState();
+// Appends new log lines to open panels, at most once a second. Returns false
+// when throttled, so the caller keeps its dirty flag.
+bool pushLog();
 
-    void pushLog();
-} // namespace net::web
+}  // namespace net::web

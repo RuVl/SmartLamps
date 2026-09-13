@@ -18,6 +18,13 @@ namespace hal {
 
         virtual void setInt(uint32_t key, int32_t value) = 0;
 
+
+        // Creates the key with `value` if it does not exist yet. The web panel
+
+        // binds widgets to keys, so a key has to exist before it can be shown.
+
+        virtual void initInt(uint32_t key, int32_t value) = 0;
+
         virtual const char *getString(uint32_t key, const char *fallback) = 0;
 
         virtual void setString(uint32_t key, const char *value) = 0;

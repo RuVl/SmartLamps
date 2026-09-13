@@ -32,6 +32,7 @@ namespace hal {
             }
 
             void setInt(uint32_t key, int32_t value) override { db.set(key, value); }
+    void initInt(uint32_t key, int32_t value) override { db.init(key, value); }
 
             const char *getString(uint32_t key, const char *fallback) override {
                 if (!db.has(key)) return fallback;

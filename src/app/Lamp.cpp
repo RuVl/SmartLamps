@@ -2,18 +2,16 @@
 
 #include <string.h>
 
+#include <Arduino.h>
+
+#include "Keys.h"
 #include "core/PostFX.h"
 #include "hal/LedDriver.h"
 #include "hal/Storage.h"
 
 namespace app {
     namespace {
-        // Storage keys for the lamp's own state. Effect parameters get their keys
-        // from hal::paramKey and never collide with these.
-        constexpr uint32_t kKeyPower = 0x6C616D70; // 'lamp'
-        constexpr uint32_t kKeyBrightness = 0x62726774; // 'brgt'
-        constexpr uint32_t kKeyEffect = 0x65666378; // 'efcx'
-
+        
         uint16_t indexOf(const core::EffectInfo *target) {
             uint16_t i = 0;
             for (core::EffectInfo *e = core::Registry::head(); e != nullptr; e = e->next, ++i)
@@ -35,10 +33,13 @@ namespace app {
         hal::ledDriver().begin(pixels_, kPixelCount);
         hal::button().begin();
 
-        on_ = hal::storage().getInt(kKeyPower, 1) != 0;
-        setBrightness(uint8_t(hal::storage().getInt(kKeyBrightness, 50)));
+        hal::storage().initInt(app::keys::kPower, 1);
+        hal::storage().initInt(app::keys::kBrightness, 50);
+        hal::storage().initInt(app::keys::kEffect, 0);
+        on_ = hal::storage().getInt(app::keys::kPower, 1) != 0;
+        setBrightness(uint8_t(hal::storage().getInt(app::keys::kBrightness, 50)));
 
-        const int32_t saved = hal::storage().getInt(kKeyEffect, 0);
+        const int32_t saved = hal::storage().getInt(app::keys::kEffect, 0);
         selectEffect(uint16_t(saved < 0 ? 0 : saved));
 
         // The lamp comes back exactly as it was left, without waiting for WiFi.
@@ -122,7 +123,9 @@ namespace app {
         const uint8_t progress = uint8_t((uint32_t(clamped) * 255) / kTransitionMs);
 
         if (transition_ == Transition::FadingOut) {
-            brightnessOut = scale8(brightnessScaled_, uint8_t(255 - progress));
+            // dim8_video squares the factor: linear in light is not linear to
+            // the eye, which sees a plain 255→0 ramp as "nothing, then a cut".
+            brightnessOut = scale8(brightnessScaled_, dim8_video(uint8_t(255 - progress)));
             if (transitionMs_ >= kTransitionMs) {
                 // Only now is the old effect destroyed and the new one built, so
                 // a single arena is enough for a visually clean change.
@@ -136,7 +139,7 @@ namespace app {
                 transitionMs_ = 0;
             }
         } else {
-            brightnessOut = scale8(brightnessOut, progress);
+            brightnessOut = scale8(brightnessOut, dim8_video(progress));
             if (transitionMs_ >= kTransitionMs) transition_ = Transition::None;
         }
     }
@@ -161,6 +164,7 @@ namespace app {
     void Lamp::loadParams(core::EffectInfo *info) {
         for (core::Param *p = effect_->params(); p != nullptr; p = p->next()) {
             const uint32_t key = hal::paramKey(info->name, p->key());
+            hal::storage().initInt(key, p->def());
             p->set(int16_t(hal::storage().getInt(key, p->def())));
         }
     }
@@ -184,7 +188,7 @@ namespace app {
 
         effectIndex_ = uint16_t(index % total);
         core::EffectInfo *info = core::Registry::at(effectIndex_);
-        hal::storage().setInt(kKeyEffect, effectIndex_);
+        hal::storage().setInt(app::keys::kEffect, effectIndex_);
         markChanged();
 
         if (effect_ == nullptr) {
@@ -216,7 +220,7 @@ namespace app {
     void Lamp::setPower(bool on) {
         if (on_ == on) return;
         on_ = on;
-        hal::storage().setInt(kKeyPower, on ? 1 : 0);
+        hal::storage().setInt(app::keys::kPower, on ? 1 : 0);
         markChanged();
         transition_ = on ? Transition::FadingIn : Transition::FadingOut;
         transitionMs_ = 0;
@@ -228,7 +232,7 @@ namespace app {
         if (percent == brightnessPercent_) return;
         brightnessPercent_ = percent;
         brightnessScaled_ = core::gammaCorrect(brightnessPercent_);
-        hal::storage().setInt(kKeyBrightness, brightnessPercent_);
+        hal::storage().setInt(app::keys::kBrightness, brightnessPercent_);
         markChanged();
     }
 
@@ -239,6 +243,9 @@ namespace app {
     }
 
     void Lamp::handle(hal::Gesture g, uint32_t nowMs) {
+        if (g != hal::Gesture::None && g != hal::Gesture::HoldTick)
+            Serial.printf("btn: %s (power=%d brightness=%u%% pwm=%u effect=%u)\n",
+                          hal::gestureName(g), on_, brightnessPercent_, brightnessScaled_, effectIndex_);
         switch (g) {
             case hal::Gesture::Click: nextEffect();
                 break;

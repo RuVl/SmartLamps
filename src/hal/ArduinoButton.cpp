@@ -12,7 +12,16 @@ namespace hal {
     namespace {
         class TouchButton final : public Button {
         public:
-            void begin() override { btn_.init(); }
+            void begin() override {
+        btn_.init();
+        // Library defaults are 50 / 500 / 600 ms. A single click is only
+        // reported once the click window closes (it could still become a
+        // double), so the window is what the user feels as lag. The pad
+        // debounces in hardware, so the software debounce is nearly free.
+        btn_.setDebTimeout(kDebounceMs);
+        btn_.setClickTimeout(kClickWindowMs);
+        btn_.setHoldTimeout(kHoldStartMs);
+    }
 
             Gesture poll() override {
                 btn_.tick();
@@ -45,6 +54,9 @@ namespace hal {
 
         private:
             static constexpr uint16_t kLongHoldMs = 5000;
+    static constexpr uint8_t kDebounceMs = 20;
+    static constexpr uint16_t kClickWindowMs = 250;
+    static constexpr uint16_t kHoldStartMs = 350;
 
             ButtonT<BUTTON_PIN> btn_{INPUT_PULLUP, HIGH};
             bool holding_ = false;

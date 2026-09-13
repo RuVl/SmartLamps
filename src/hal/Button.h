@@ -28,5 +28,32 @@ namespace hal {
         virtual Gesture poll() = 0;
     };
 
+    // For logs.
+
+    inline const char* gestureName(Gesture g) {
+
+        switch (g) {
+
+            case Gesture::Click: return "click";
+
+            case Gesture::DoubleClick: return "double";
+
+            case Gesture::TripleClick: return "triple";
+
+            case Gesture::HoldStart: return "hold-start";
+
+            case Gesture::HoldTick: return "hold";
+
+            case Gesture::HoldEnd: return "hold-end";
+
+            case Gesture::LongHold: return "long-hold";
+
+            default: return "none";
+
+        }
+
+    }
+
+
     Button &button();
 } // namespace hal
