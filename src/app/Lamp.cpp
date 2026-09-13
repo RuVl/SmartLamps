@@ -1,5 +1,7 @@
 #include "Lamp.h"
 
+#include <string.h>
+
 #include "core/PostFX.h"
 #include "hal/LedDriver.h"
 #include "hal/Storage.h"
@@ -12,6 +14,13 @@ namespace {
 constexpr uint32_t kKeyPower = 0x6C616D70;       // 'lamp'
 constexpr uint32_t kKeyBrightness = 0x62726774;  // 'brgt'
 constexpr uint32_t kKeyEffect = 0x65666378;      // 'efcx'
+
+uint16_t indexOf(const core::EffectInfo* target) {
+    uint16_t i = 0;
+    for (core::EffectInfo* e = core::Registry::head(); e != nullptr; e = e->next, ++i)
+        if (e == target) return i;
+    return 0;
+}
 
 }  // namespace
 
@@ -35,6 +44,7 @@ void Lamp::begin() {
     // The lamp comes back exactly as it was left, without waiting for WiFi.
     transition_ = Transition::FadingIn;
     transitionMs_ = 0;
+    changed_ = true;
 }
 
 void Lamp::tick(uint32_t nowMs) {
@@ -49,15 +59,24 @@ void Lamp::render(uint32_t nowMs) {
     lastRenderMs_ = nowMs;
 
     const uint16_t dtMs = uint16_t(elapsed > 1000 ? 1000 : elapsed);
-
     core::Frame frame = frameOf();
-    if (effect_ != nullptr) effect_->render(frame, dtMs);
+
+    // Keep drawing while fading out, so switching off is a fade, not a cut.
+    const bool drawing = on_ || transition_ == Transition::FadingOut;
+    if (drawing && effect_ != nullptr) effect_->render(frame, dtMs);
+    else frame.clear();
 
     uint8_t brightness = on_ ? brightnessScaled_ : 0;
     applyTransition(dtMs, brightness);
 
-    // Effects draw at full range; brightness, gamma and the supply limit are
-    // applied here, once, to the finished frame.
+    if (status_ != Status::Ok) {
+        drawStatus(frame, nowMs);
+        // A dark lamp still has to show that it is waiting for WiFi.
+        if (brightness < kStatusMinBrightness) brightness = kStatusMinBrightness;
+    }
+
+    // Effects draw at full range; the supply limit is applied here, once, to
+    // the finished frame.
     brightness = core::limitBrightness(pixels_, kPixelCount, brightness,
                                        LED_CURRENT_LIMIT_MA);
     hal::ledDriver().show(brightness);
@@ -74,6 +93,22 @@ core::Frame Lamp::frameOf() {
     return core::Frame(pixels_, indexMap_, geometry_);
 }
 
+void Lamp::drawStatus(core::Frame& f, uint32_t nowMs) {
+    // Top-left pixel, breathing slowly so it reads as "state", not "stuck".
+    const uint8_t phase = uint8_t((nowMs / 6) & 0xFF);
+    const uint8_t breath = uint8_t(96 + scale8(sin8(phase), 159));
+
+    CRGB c;
+    switch (status_) {
+        case Status::AccessPoint: c = CRGB(0, 0, breath); break;             // blue
+        case Status::NoWifi:      c = CRGB(breath, uint8_t(breath / 3), 0); break;  // amber
+        case Status::NoBroker:    c = CRGB(breath, 0, breath); break;        // magenta
+        case Status::Updating:    c = CRGB(breath, breath, breath); break;   // white
+        default: return;
+    }
+    f.at(0, uint8_t(f.height() - 1)) = c;
+}
+
 void Lamp::applyTransition(uint16_t dtMs, uint8_t& brightnessOut) {
     if (transition_ == Transition::None) return;
 
@@ -82,13 +117,17 @@ void Lamp::applyTransition(uint16_t dtMs, uint8_t& brightnessOut) {
     const uint8_t progress = uint8_t((uint32_t(clamped) * 255) / kTransitionMs);
 
     if (transition_ == Transition::FadingOut) {
-        brightnessOut = scale8(brightnessOut, uint8_t(255 - progress));
+        brightnessOut = scale8(brightnessScaled_, uint8_t(255 - progress));
         if (transitionMs_ >= kTransitionMs) {
             // Only now is the old effect destroyed and the new one built, so
             // a single arena is enough for a visually clean change.
-            activate(pending_);
-            pending_ = nullptr;
-            transition_ = Transition::FadingIn;
+            if (pending_ != nullptr) {
+                activate(pending_);
+                pending_ = nullptr;
+                transition_ = Transition::FadingIn;
+            } else {
+                transition_ = Transition::None;  // faded out to off
+            }
             transitionMs_ = 0;
         }
     } else {
@@ -121,6 +160,19 @@ void Lamp::loadParams(core::EffectInfo* info) {
     }
 }
 
+bool Lamp::setParam(const char* key, int16_t value) {
+    if (effect_ == nullptr || info_ == nullptr) return false;
+    for (core::Param* p = effect_->params(); p != nullptr; p = p->next()) {
+        if (strcmp(p->key(), key) != 0) continue;
+        if (p->set(value)) {
+            hal::storage().setInt(hal::paramKey(info_->name, key), p->get());
+            markChanged();
+        }
+        return true;
+    }
+    return false;
+}
+
 void Lamp::selectEffect(uint16_t index) {
     const uint16_t total = core::Registry::count();
     if (total == 0) return;
@@ -128,15 +180,24 @@ void Lamp::selectEffect(uint16_t index) {
     effectIndex_ = uint16_t(index % total);
     core::EffectInfo* info = core::Registry::at(effectIndex_);
     hal::storage().setInt(kKeyEffect, effectIndex_);
+    markChanged();
 
     if (effect_ == nullptr) {
         activate(info);  // first boot: nothing to fade out of
         return;
     }
+    if (info == info_) return;
 
     pending_ = info;
     transition_ = Transition::FadingOut;
     transitionMs_ = 0;
+}
+
+bool Lamp::selectEffect(const char* name) {
+    core::EffectInfo* info = core::Registry::find(name);
+    if (info == nullptr) return false;
+    selectEffect(indexOf(info));
+    return true;
 }
 
 void Lamp::nextEffect() { selectEffect(uint16_t(effectIndex_ + 1)); }
@@ -151,22 +212,32 @@ void Lamp::setPower(bool on) {
     if (on_ == on) return;
     on_ = on;
     hal::storage().setInt(kKeyPower, on ? 1 : 0);
+    markChanged();
     transition_ = on ? Transition::FadingIn : Transition::FadingOut;
     transitionMs_ = 0;
     if (!on) pending_ = nullptr;  // fading out to darkness, not to an effect
 }
 
 void Lamp::setBrightness(uint8_t percent) {
-    brightnessPercent_ = percent > 100 ? 100 : percent;
+    percent = percent > 100 ? 100 : percent;
+    if (percent == brightnessPercent_) return;
+    brightnessPercent_ = percent;
     brightnessScaled_ = core::gammaCorrect(brightnessPercent_);
     hal::storage().setInt(kKeyBrightness, brightnessPercent_);
+    markChanged();
+}
+
+bool Lamp::consumeChanged() {
+    const bool was = changed_;
+    changed_ = false;
+    return was;
 }
 
 void Lamp::handle(hal::Gesture g) {
     switch (g) {
         case hal::Gesture::Click: nextEffect(); break;
         case hal::Gesture::DoubleClick: prevEffect(); break;
-        case hal::Gesture::TripleClick: break;  // ping — lands with the MQTT phase
+        case hal::Gesture::TripleClick: break;  // ping — lands with the pairing phase
         case hal::Gesture::HoldTick: {
             // Brightness ramps up, wraps around at the top.
             const uint8_t next = uint8_t(brightnessPercent_ >= 100 ? 5 : brightnessPercent_ + 1);

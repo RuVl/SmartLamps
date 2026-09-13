@@ -6,6 +6,7 @@
 #include <Arduino.h>
 
 #include "app/Lamp.h"
+#include "net/Net.h"
 
 #ifdef LAMP_BOARD_ESP32S3
 namespace {
@@ -25,6 +26,7 @@ void renderTask(void*) {
 void setup() {
     Serial.begin(SERIAL_BAUD);
     app::lamp().begin();
+    net::begin();
 
 #ifdef LAMP_BOARD_ESP32S3
     xTaskCreatePinnedToCore(renderTask, "render", 4096, nullptr, 2, nullptr, 1);
@@ -34,6 +36,7 @@ void setup() {
 void loop() {
     const uint32_t now = millis();
     app::lamp().tick(now);
+    net::tick(now);
 
 #ifndef LAMP_BOARD_ESP32S3
     // One core, one loop — same order, no task.

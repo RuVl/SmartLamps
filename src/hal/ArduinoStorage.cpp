@@ -4,6 +4,7 @@
 // Dragging a brightness slider therefore costs one flash erase, not fifty.
 
 #include "hal/Storage.h"
+#include "hal/Database.h"
 
 #include <Arduino.h>
 #include <GyverDBFile.h>
@@ -57,6 +58,8 @@ Storage& storage() {
     static DbStorage instance;
     return instance;
 }
+
+GyverDBFile& database() { return db; }
 
 // FNV-1a over "<effect>.<param>". Keys of different effects never collide, so
 // a parameter called "speed" can exist in every effect without a prefix.
