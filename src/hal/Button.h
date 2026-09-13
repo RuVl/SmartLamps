@@ -8,25 +8,25 @@
 #include <stdint.h>
 
 namespace hal {
+    enum class Gesture : uint8_t {
+        None,
+        Click, // next effect
+        DoubleClick, // previous effect
+        TripleClick, // ping the paired lamp
+        HoldStart, // begin brightness adjustment
+        HoldTick, // continue adjusting while held
+        HoldEnd,
+        LongHold, // 5 s: toggle the lamp on/off
+    };
 
-enum class Gesture : uint8_t {
-    None,
-    Click,        // next effect
-    DoubleClick,  // previous effect
-    TripleClick,  // ping the paired lamp
-    HoldStart,    // begin brightness adjustment
-    HoldTick,     // continue adjusting while held
-    HoldEnd,
-    LongHold,     // 5 s: toggle the lamp on/off
-};
+    class Button {
+    public:
+        virtual ~Button() = default;
 
-class Button {
-public:
-    virtual ~Button() = default;
-    virtual void begin() = 0;
-    virtual Gesture poll() = 0;
-};
+        virtual void begin() = 0;
 
-Button& button();
+        virtual Gesture poll() = 0;
+    };
 
-}  // namespace hal
+    Button &button();
+} // namespace hal

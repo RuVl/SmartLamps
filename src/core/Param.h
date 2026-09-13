@@ -14,49 +14,47 @@
 #include <atomic>
 
 namespace core {
+    class Effect;
 
-class Effect;
+    class Param {
+    public:
+        Param(Effect &owner, const char *key, const char *label,
+              int16_t min, int16_t max, int16_t def);
 
-class Param {
-public:
-    Param(Effect& owner, const char* key, const char* label,
-          int16_t min, int16_t max, int16_t def);
+        // Reads as a number: `if (hue > 128)`, `f.fade(speed)`. The implicit
+        // conversion is deliberate and is what makes effect code read like the
+        // arithmetic it is; see docs/writing-effects.md. A Param is a value with
+        // no ownership, so the usual danger of implicit conversion does not apply.
+        // NOLINTNEXTLINE(google-explicit-constructor,hicpp-explicit-conversions)
+        [[nodiscard]] operator int16_t() const { return value_.load(std::memory_order_relaxed); }
 
-    // Reads as a number: `if (hue > 128)`, `f.fade(speed)`. The implicit
-    // conversion is deliberate and is what makes effect code read like the
-    // arithmetic it is; see docs/writing-effects.md. A Param is a value with
-    // no ownership, so the usual danger of implicit conversion does not apply.
-    // NOLINTNEXTLINE(google-explicit-constructor,hicpp-explicit-conversions)
-    [[nodiscard]] operator int16_t() const { return value_.load(std::memory_order_relaxed); }
+        // Explicit spelling, for where the conversion would be ambiguous.
+        [[nodiscard]] int16_t get() const { return value_.load(std::memory_order_relaxed); }
 
-    // Explicit spelling, for where the conversion would be ambiguous.
-    [[nodiscard]] int16_t get() const { return value_.load(std::memory_order_relaxed); }
+        // Clamps into [min, max]. Returns true when the value actually changed.
+        // Not const, although the compiler would allow it: std::atomic::store is
+        // const-qualified, but changing a parameter's value is not a const
+        // operation on the parameter in any sense a reader would recognise.
+        // NOLINTNEXTLINE(readability-make-member-function-const)
+        bool set(int16_t v);
 
-    // Clamps into [min, max]. Returns true when the value actually changed.
-    // Not const, although the compiler would allow it: std::atomic::store is
-    // const-qualified, but changing a parameter's value is not a const
-    // operation on the parameter in any sense a reader would recognise.
-    // NOLINTNEXTLINE(readability-make-member-function-const)
-    bool set(int16_t v);
+        [[nodiscard]] const char *key() const { return key_; }
+        [[nodiscard]] const char *label() const { return label_; }
+        [[nodiscard]] int16_t min() const { return min_; }
+        [[nodiscard]] int16_t max() const { return max_; }
+        [[nodiscard]] int16_t def() const { return def_; }
 
-    [[nodiscard]] const char* key() const { return key_; }
-    [[nodiscard]] const char* label() const { return label_; }
-    [[nodiscard]] int16_t min() const { return min_; }
-    [[nodiscard]] int16_t max() const { return max_; }
-    [[nodiscard]] int16_t def() const { return def_; }
+        [[nodiscard]] Param *next() const { return next_; }
 
-    [[nodiscard]] Param* next() const { return next_; }
+    private:
+        const char *key_;
+        const char *label_;
+        int16_t min_;
+        int16_t max_;
+        int16_t def_;
+        std::atomic<int16_t> value_;
+        Param *next_ = nullptr;
 
-private:
-    const char* key_;
-    const char* label_;
-    int16_t min_;
-    int16_t max_;
-    int16_t def_;
-    std::atomic<int16_t> value_;
-    Param* next_ = nullptr;
-
-    friend class Effect;
-};
-
-}  // namespace core
+        friend class Effect;
+    };
+} // namespace core

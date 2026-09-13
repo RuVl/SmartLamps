@@ -11,21 +11,19 @@
 #include <FastLED.h>
 
 namespace hal {
+    class LedDriver {
+    public:
+        virtual ~LedDriver() = default;
 
-class LedDriver {
-public:
-    virtual ~LedDriver() = default;
+        virtual void begin(CRGB *pixels, uint16_t count) = 0;
 
-    virtual void begin(CRGB* pixels, uint16_t count) = 0;
+        // Hands the buffer to the hardware. Returns without waiting for the last
+        // bit to leave the pin.
+        virtual void show(uint8_t brightness) = 0;
 
-    // Hands the buffer to the hardware. Returns without waiting for the last
-    // bit to leave the pin.
-    virtual void show(uint8_t brightness) = 0;
+        // True while the previous frame is still being clocked out.
+        [[nodiscard]] virtual bool busy() const = 0;
+    };
 
-    // True while the previous frame is still being clocked out.
-    [[nodiscard]] virtual bool busy() const = 0;
-};
-
-LedDriver& ledDriver();
-
-}  // namespace hal
+    LedDriver &ledDriver();
+} // namespace hal

@@ -9,12 +9,12 @@
 #pragma GCC diagnostic pop
 
 namespace net {
+    sets::Logger &log();
 
-sets::Logger& log();
+    // Appends a line with the level prefix the panel colours by.
+    void logInfo(const String &s);
 
-// Appends a line with the level prefix the panel colours by.
-void logInfo(const String& s);
-void logWarn(const String& s);
-void logError(const String& s);
+    void logWarn(const String &s);
 
-}  // namespace net
+    void logError(const String &s);
+} // namespace net

@@ -6,25 +6,28 @@
 #include <Arduino.h>
 
 #include "app/Lamp.h"
+#include "app/SelfTest.h"
 #include "net/Net.h"
 
 #ifdef LAMP_BOARD_ESP32S3
 namespace {
-
-// Rendering gets its own core. Once the network lands, an open web panel and a
-// busy MQTT connection will not be able to steal frames from the matrix.
-void renderTask(void*) {
-    for (;;) {
-        app::lamp().render(millis());
-        vTaskDelay(1);
+    // Rendering gets its own core. Once the network lands, an open web panel and a
+    // busy MQTT connection will not be able to steal frames from the matrix.
+    void renderTask(void *) {
+        for (;;) {
+            app::lamp().render(millis());
+            vTaskDelay(1);
+        }
     }
-}
-
-}  // namespace
+} // namespace
 #endif
 
 void setup() {
     Serial.begin(SERIAL_BAUD);
+#ifdef LAMP_SELFTEST
+    app::selftest::begin();
+    return;
+#endif
     app::lamp().begin();
     net::begin();
 
@@ -34,6 +37,10 @@ void setup() {
 }
 
 void loop() {
+#ifdef LAMP_SELFTEST
+    app::selftest::tick();
+    return;
+#endif
     const uint32_t now = millis();
     app::lamp().tick(now);
     net::tick(now);

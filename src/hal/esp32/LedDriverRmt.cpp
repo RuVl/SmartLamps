@@ -9,31 +9,28 @@
 #include <FastLED.h>
 
 namespace hal {
-namespace {
+    namespace {
+        class RmtDriver final : public LedDriver {
+        public:
+            void begin(CRGB *pixels, uint16_t count) override {
+                // The pin must be a compile-time constant for FastLED's template.
+                FastLED.addLeds<WS2812B, LED_DATA_PIN, GRB>(pixels, count);
+                FastLED.clear(true);
+            }
 
-class RmtDriver final : public LedDriver {
-public:
-    void begin(CRGB* pixels, uint16_t count) override {
-        // The pin must be a compile-time constant for FastLED's template.
-        FastLED.addLeds<WS2812B, LED_DATA_PIN, GRB>(pixels, count);
-        FastLED.clear(true);
+            void show(uint8_t brightness) override {
+                FastLED.setBrightness(brightness);
+                FastLED.show();
+            }
+
+            // FastLED's RMT backend waits for the previous transfer inside show(), so
+            // from the caller's point of view the driver is never busy.
+            bool busy() const override { return false; }
+        };
+    } // namespace
+
+    LedDriver &ledDriver() {
+        static RmtDriver instance;
+        return instance;
     }
-
-    void show(uint8_t brightness) override {
-        FastLED.setBrightness(brightness);
-        FastLED.show();
-    }
-
-    // FastLED's RMT backend waits for the previous transfer inside show(), so
-    // from the caller's point of view the driver is never busy.
-    bool busy() const override { return false; }
-};
-
-}  // namespace
-
-LedDriver& ledDriver() {
-    static RmtDriver instance;
-    return instance;
-}
-
-}  // namespace hal
+} // namespace hal

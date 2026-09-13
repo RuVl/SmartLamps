@@ -1,12 +1,12 @@
 #pragma once
 
 namespace net::web {
+    void begin();
 
-void begin();
-void tick();
+    void tick();
 
-// Pushes the lamp's current state into open panels without a page reload.
-void pushState();
-void pushLog();
+    // Pushes the lamp's current state into open panels without a page reload.
+    void pushState();
 
-}  // namespace net::web
+    void pushLog();
+} // namespace net::web
