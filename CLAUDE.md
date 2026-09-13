@@ -52,8 +52,11 @@ Read `docs/architecture.md` first. The rules that matter when editing:
   bit-bang — bit-banging blocks interrupts for ~7.7 ms per frame and tears async HTTP
   responses apart. See `docs/adr/0003-hardware-led-transport.md`.
 - That also means the single I2S peripheral on ESP8266 is taken: no microphone there.
-- ESP32-S3 needs `board_build.psram_type = opi` and `-DBOARD_HAS_PSRAM`; without them
-  `ESP.getPsramSize()` reports 0 on a perfectly good N16R8.
+- The stock `esp32-s3-devkitc-1` board definition is the N8 variant with **no PSRAM**, so
+  `platformio.ini` overrides `board_build.arduino.memory_type = qio_opi` along with the
+  flash size. Miss `memory_type` and the build silently links the `qio_qspi` SDK, leaving
+  PSRAM unavailable and `ESP.getPsramSize()` at 0 on a perfectly good N16R8. Verify with
+  `pio run -e esp32s3 -t envdump | tr ',' '\n' | grep -oE '(qio|dio|opi)_(opi|qspi)'`.
 - The `model` partition in `partitions/esp32s3.csv` is reserved for esp-sr wake word
   models. Do not repurpose it.
 

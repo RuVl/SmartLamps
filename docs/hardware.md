@@ -116,5 +116,27 @@ Serial.printf("flash %u MB, psram %u MB\n",
               ESP.getFlashChipSize() >> 20, ESP.getPsramSize() >> 20);
 ```
 
-`getPsramSize()` вернёт ноль, если PSRAM не включена в конфиге сборки — в
-`platformio.ini` за это отвечают `board_build.psram_type = opi` и `-DBOARD_HAS_PSRAM`.
+`getPsramSize()` вернёт ноль, если PSRAM не включена в конфиге сборки, и хорошая плата
+будет выглядеть как бракованная.
+
+Тонкость, на которой легко обжечься: штатное определение платы `esp32-s3-devkitc-1` в
+PlatformIO — это вариант **N8 без PSRAM**. Поэтому в `platformio.ini` перекрыто всё
+сразу:
+
+```ini
+board_build.arduino.memory_type = qio_opi   ; quad flash + octal PSRAM
+board_build.flash_mode = qio
+board_build.psram_type = opi
+board_upload.flash_size = 16MB
+board_upload.maximum_size = 16777216
+```
+
+Ключевая строка — `memory_type`. Без неё сборка линкуется с вариантом SDK `qio_qspi`,
+проходит без единого предупреждения, а PSRAM на плате остаётся недоступной. Проверить,
+что выбран нужный вариант, можно не прошивая:
+
+```bash
+pio run -e esp32s3 -t envdump | tr ',' '\n' | grep -oE '(qio|dio|opi)_(opi|qspi)'
+```
+
+Должно быть `qio_opi`.
