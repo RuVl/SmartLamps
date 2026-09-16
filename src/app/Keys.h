@@ -7,10 +7,9 @@
 
 #include <stdint.h>
 
-namespace app::keys {
-
-constexpr uint32_t kPower = 0x6C616D70;       // 'lamp'
-constexpr uint32_t kBrightness = 0x62726774;  // 'brgt'
-constexpr uint32_t kEffect = 0x65666378;      // 'efcx'
-
-}  // namespace app::keys
+namespace app::keys
+{
+    constexpr uint32_t kPower = 0x6C616D70; // 'lamp'
+    constexpr uint32_t kBrightness = 0x62726774; // 'brgt'
+    constexpr uint32_t kEffect = 0x65666378; // 'efcx'
+}

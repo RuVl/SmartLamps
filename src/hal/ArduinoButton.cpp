@@ -8,38 +8,47 @@
 #include <Arduino.h>
 #include <EncButton.h>
 
-namespace hal {
-    namespace {
-        class TouchButton final : public Button {
+namespace hal
+{
+    namespace
+    {
+        class TouchButton final : public Button
+        {
         public:
-            void begin() override {
-        btn_.init();
-        // Library defaults are 50 / 500 / 600 ms. A single click is only
-        // reported once the click window closes (it could still become a
-        // double), so the window is what the user feels as lag. The pad
-        // debounces in hardware, so the software debounce is nearly free.
-        btn_.setDebTimeout(kDebounceMs);
-        btn_.setClickTimeout(kClickWindowMs);
-        btn_.setHoldTimeout(kHoldStartMs);
-    }
+            void begin() override
+            {
+                btn_.init();
+                // Library defaults are 50 / 500 / 600 ms. A single click is only
+                // reported once the click window closes (it could still become a
+                // double), so the window is what the user feels as lag. The pad
+                // debounces in hardware, so the software debounce is nearly free.
+                btn_.setDebTimeout(kDebounceMs);
+                btn_.setClickTimeout(kClickWindowMs);
+                btn_.setHoldTimeout(kHoldStartMs);
+            }
 
-            Gesture poll() override {
+            Gesture poll() override
+            {
                 btn_.tick();
 
-                if (btn_.hold(1) && !holding_) {
+                if (btn_.hold(1) && !holding_)
+                {
                     holding_ = true;
                     return Gesture::HoldStart;
                 }
-                if (btn_.holding()) {
+                if (btn_.holding())
+                {
                     // Five seconds of holding means power, not brightness. The
                     // brightness ramp stops as soon as that threshold is crossed.
-                    if (!longFired_ && btn_.pressFor() >= kLongHoldMs) {
+                    if (!longFired_ && btn_.pressFor() >= kLongHoldMs)
+                    {
                         longFired_ = true;
                         return Gesture::LongHold;
                     }
                     return longFired_ ? Gesture::None : Gesture::HoldTick;
                 }
-                if (holding_ && btn_.release()) {
+                if (holding_ && btn_.release())
+                {
                     holding_ = false;
                     const bool wasLong = longFired_;
                     longFired_ = false;
@@ -54,18 +63,19 @@ namespace hal {
 
         private:
             static constexpr uint16_t kLongHoldMs = 5000;
-    static constexpr uint8_t kDebounceMs = 20;
-    static constexpr uint16_t kClickWindowMs = 250;
-    static constexpr uint16_t kHoldStartMs = 350;
+            static constexpr uint8_t kDebounceMs = 20;
+            static constexpr uint16_t kClickWindowMs = 250;
+            static constexpr uint16_t kHoldStartMs = 350;
 
             ButtonT<BUTTON_PIN> btn_{INPUT_PULLUP, HIGH};
             bool holding_ = false;
             bool longFired_ = false;
         };
-    } // namespace
+    }
 
-    Button &button() {
+    Button& button()
+    {
         static TouchButton instance;
         return instance;
     }
-} // namespace hal
+}

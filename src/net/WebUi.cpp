@@ -28,127 +28,140 @@
 #include "hal/Database.h"
 #include "hal/Storage.h"
 
-namespace net::web {
-namespace {
+namespace net::web
+{
+    namespace
+    {
+        // A slider is echoed to the lamp no more often than this. 250 ms is what the
+        // previous firmware settled on after crashes at higher rates.
+        constexpr uint16_t kSliderThrottleMs = 250;
+        constexpr uint32_t kLogPushMs = 1000;
 
-// A slider is echoed to the lamp no more often than this. 250 ms is what the
-// previous firmware settled on after crashes at higher rates.
-constexpr uint16_t kSliderThrottleMs = 250;
-constexpr uint32_t kLogPushMs = 1000;
+        SettingsAsyncWS settings("SmartLamp", &hal::database());
+        String g_effectOptions; // "Огонь;Радуга;…", built once from the registry
 
-SettingsAsyncWS settings("SmartLamp", &hal::database());
-String g_effectOptions;  // "Огонь;Радуга;…", built once from the registry
+        void buildLampMenu(sets::Builder& b)
+        {
+            app::Lamp& lamp = app::lamp();
+            GyverDBFile& db = hal::database();
+            sets::Menu menu(b, "Лампа");
 
-void buildLampMenu(sets::Builder& b) {
-    app::Lamp& lamp = app::lamp();
-    GyverDBFile& db = hal::database();
-    sets::Menu menu(b, "Лампа");
+            if (b.Switch(app::keys::kPower, "Питание"))
+                lamp.setPower(db.get(app::keys::kPower).toBool());
 
-    if (b.Switch(app::keys::kPower, "Питание"))
-        lamp.setPower(db.get(app::keys::kPower).toBool());
+            if (b.Slider(app::keys::kBrightness, "Яркость", 0, 100, 1, "%"))
+                lamp.setBrightness(uint8_t(db.get(app::keys::kBrightness).toInt()));
 
-    if (b.Slider(app::keys::kBrightness, "Яркость", 0, 100, 1, "%"))
-        lamp.setBrightness(uint8_t(db.get(app::keys::kBrightness).toInt()));
+            if (b.Select(app::keys::kEffect, "Эффект", g_effectOptions))
+            {
+                lamp.selectEffect(uint16_t(db.get(app::keys::kEffect).toInt()));
+                b.reload(); // the parameter sliders below belong to the new effect
+            }
 
-    if (b.Select(app::keys::kEffect, "Эффект", g_effectOptions)) {
-        lamp.selectEffect(uint16_t(db.get(app::keys::kEffect).toInt()));
-        b.reload();  // the parameter sliders below belong to the new effect
-    }
+            // Everything below comes from the effect's Param declarations. The keys
+            // are the same ones Lamp reads the parameters back from at boot.
+            if (lamp.params() != nullptr)
+            {
+                sets::Group group(b, "Параметры");
+                for (core::Param* p = lamp.params(); p != nullptr; p = p->next())
+                {
+                    const size_t id = hal::paramKey(lamp.effectName(), p->key());
+                    if (b.Slider(id, p->label(), p->min(), p->max(), 1))
+                        lamp.setParam(p->key(), int16_t(db.get(id).toInt()));
+                }
+            }
+        }
 
-    // Everything below comes from the effect's Param declarations. The keys
-    // are the same ones Lamp reads the parameters back from at boot.
-    if (lamp.params() != nullptr) {
-        sets::Group group(b, "Параметры");
-        for (core::Param* p = lamp.params(); p != nullptr; p = p->next()) {
-            const size_t id = hal::paramKey(lamp.effectName(), p->key());
-            if (b.Slider(id, p->label(), p->min(), p->max(), 1))
-                lamp.setParam(p->key(), int16_t(db.get(id).toInt()));
+        void buildWifiMenu(sets::Builder& b)
+        {
+            sets::Menu menu(b, "WiFi");
+            b.Input(kWifiSsid, "Сеть (только 2,4 ГГц)");
+            b.Pass(kWifiPass, "Пароль");
+            b.LED(kIdWifiLed, "Подключено", wifi::connected());
+            if (b.Button("Переподключить"))
+            {
+                hal::storage().flush();
+                wifi::reconnect();
+            }
+        }
+
+        void buildMqttMenu(sets::Builder& b)
+        {
+            sets::Menu menu(b, "MQTT");
+            b.Input(kMqttHost, "Сервер");
+            b.Number(kMqttPort, "Порт", nullptr, 1, 65535);
+            b.Input(kMqttUser, "Пользователь");
+            b.Pass(kMqttPass, "Пароль");
+            b.LED(kIdMqttLed, "Подключено", mqtt::connected());
+            if (b.Button("Переподключить"))
+            {
+                hal::storage().flush();
+                mqtt::reconnect();
+            }
+        }
+
+        void buildSystemMenu(sets::Builder& b)
+        {
+            sets::Menu menu(b, "Система");
+            b.Input(kLampName, "Имя лампы");
+            b.Input(kPairName, "Парная лампа");
+            b.Pass(kPanelPass, "Пароль панели");
+
+            String info;
+            info += F("IP ");
+            info += WiFi.localIP().toString();
+            info += F(" · RSSI ");
+            info += WiFi.RSSI();
+            info += F(" · ");
+            info += app::lamp().fps();
+            info += F(" к/с");
+            b.Label(kIdInfo, "Состояние", info);
+
+            if (b.Button("Применить имя и перезагрузить"))
+            {
+                hal::storage().flush();
+                ESP.restart();
+            }
+            b.Log(kIdLog, log());
+        }
+
+        void build(sets::Builder& b)
+        {
+            buildLampMenu(b);
+            buildWifiMenu(b);
+            buildMqttMenu(b);
+            buildSystemMenu(b);
         }
     }
-}
 
-void buildWifiMenu(sets::Builder& b) {
-    sets::Menu menu(b, "WiFi");
-    b.Input(kWifiSsid, "Сеть (только 2,4 ГГц)");
-    b.Pass(kWifiPass, "Пароль");
-    b.LED(kIdWifiLed, "Подключено", wifi::connected());
-    if (b.Button("Переподключить")) {
-        hal::storage().flush();
-        wifi::reconnect();
-    }
-}
+    void begin()
+    {
+        for (core::EffectInfo* e = core::Registry::head(); e != nullptr; e = e->next)
+        {
+            if (!g_effectOptions.isEmpty()) g_effectOptions += ';';
+            g_effectOptions += e->name;
+        }
 
-void buildMqttMenu(sets::Builder& b) {
-    sets::Menu menu(b, "MQTT");
-    b.Input(kMqttHost, "Сервер");
-    b.Number(kMqttPort, "Порт", nullptr, 1, 65535);
-    b.Input(kMqttUser, "Пользователь");
-    b.Pass(kMqttPass, "Пароль");
-    b.LED(kIdMqttLed, "Подключено", mqtt::connected());
-    if (b.Button("Переподключить")) {
-        hal::storage().flush();
-        mqtt::reconnect();
-    }
-}
+        GyverDBFile& db = hal::database();
+        db.init(kPanelPass, "");
+        const String pass = db.get(kPanelPass).toString();
+        if (!pass.isEmpty()) settings.setPass(pass);
 
-void buildSystemMenu(sets::Builder& b) {
-    sets::Menu menu(b, "Система");
-    b.Input(kLampName, "Имя лампы");
-    b.Input(kPairName, "Парная лампа");
-    b.Pass(kPanelPass, "Пароль панели");
-
-    String info;
-    info += F("IP ");
-    info += WiFi.localIP().toString();
-    info += F(" · RSSI ");
-    info += WiFi.RSSI();
-    info += F(" · ");
-    info += app::lamp().fps();
-    info += F(" к/с");
-    b.Label(kIdInfo, "Состояние", info);
-
-    if (b.Button("Применить имя и перезагрузить")) {
-        hal::storage().flush();
-        ESP.restart();
-    }
-    b.Log(kIdLog, log());
-}
-
-void build(sets::Builder& b) {
-    buildLampMenu(b);
-    buildWifiMenu(b);
-    buildMqttMenu(b);
-    buildSystemMenu(b);
-}
-
-}  // namespace
-
-void begin() {
-    for (core::EffectInfo* e = core::Registry::head(); e != nullptr; e = e->next) {
-        if (!g_effectOptions.isEmpty()) g_effectOptions += ';';
-        g_effectOptions += e->name;
+        settings.setProjectInfo("SmartLamp", "https://github.com/RuVl/SmartLamps");
+        settings.config.sliderTout = kSliderThrottleMs;
+        settings.onBuild(build);
+        settings.begin();
     }
 
-    GyverDBFile& db = hal::database();
-    db.init(kPanelPass, "");
-    const String pass = db.get(kPanelPass).toString();
-    if (!pass.isEmpty()) settings.setPass(pass);
+    void tick() { settings.tick(); }
 
-    settings.setProjectInfo("SmartLamp", "https://github.com/RuVl/SmartLamps");
-    settings.config.sliderTout = kSliderThrottleMs;
-    settings.onBuild(build);
-    settings.begin();
+    bool pushLog()
+    {
+        static uint32_t last = 0;
+        const uint32_t now = millis();
+        if (now - last < kLogPushMs) return false;
+        last = now;
+        settings.updater().update(kIdLog, log());
+        return true;
+    }
 }
-
-void tick() { settings.tick(); }
-
-bool pushLog() {
-    static uint32_t last = 0;
-    const uint32_t now = millis();
-    if (now - last < kLogPushMs) return false;
-    last = now;
-    settings.updater().update(kIdLog, log());
-    return true;
-}
-
-}  // namespace net::web

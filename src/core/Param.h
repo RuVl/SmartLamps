@@ -13,12 +13,14 @@
 
 #include <atomic>
 
-namespace core {
+namespace core
+{
     class Effect;
 
-    class Param {
+    class Param
+    {
     public:
-        Param(Effect &owner, const char *key, const char *label,
+        Param(Effect& owner, const char* key, const char* label,
               int16_t min, int16_t max, int16_t def);
 
         // Reads as a number: `if (hue > 128)`, `f.fade(speed)`. The implicit
@@ -38,23 +40,23 @@ namespace core {
         // NOLINTNEXTLINE(readability-make-member-function-const)
         bool set(int16_t v);
 
-        [[nodiscard]] const char *key() const { return key_; }
-        [[nodiscard]] const char *label() const { return label_; }
+        [[nodiscard]] const char* key() const { return key_; }
+        [[nodiscard]] const char* label() const { return label_; }
         [[nodiscard]] int16_t min() const { return min_; }
         [[nodiscard]] int16_t max() const { return max_; }
         [[nodiscard]] int16_t def() const { return def_; }
 
-        [[nodiscard]] Param *next() const { return next_; }
+        [[nodiscard]] Param* next() const { return next_; }
 
     private:
-        const char *key_;
-        const char *label_;
+        const char* key_;
+        const char* label_;
         int16_t min_;
         int16_t max_;
         int16_t def_;
         std::atomic<int16_t> value_;
-        Param *next_ = nullptr;
+        Param* next_ = nullptr;
 
         friend class Effect;
     };
-} // namespace core
+}

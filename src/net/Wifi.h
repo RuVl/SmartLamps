@@ -2,7 +2,8 @@
 
 #include <stdint.h>
 
-namespace net::wifi {
+namespace net::wifi
+{
     void begin();
 
     void tick();
@@ -12,4 +13,4 @@ namespace net::wifi {
     bool connected();
 
     bool accessPointUp();
-} // namespace net::wifi
+}

@@ -7,8 +7,10 @@
 
 #include <stdint.h>
 
-namespace hal {
-    class Storage {
+namespace hal
+{
+    class Storage
+    {
     public:
         virtual ~Storage() = default;
 
@@ -25,9 +27,9 @@ namespace hal {
 
         virtual void initInt(uint32_t key, int32_t value) = 0;
 
-        virtual const char *getString(uint32_t key, const char *fallback) = 0;
+        virtual const char* getString(uint32_t key, const char* fallback) = 0;
 
-        virtual void setString(uint32_t key, const char *value) = 0;
+        virtual void setString(uint32_t key, const char* value) = 0;
 
         // Called every loop; performs the deferred write when due.
         virtual void tick() = 0;
@@ -36,10 +38,10 @@ namespace hal {
         virtual void flush() = 0;
     };
 
-    Storage &storage();
+    Storage& storage();
 
     // Stable key for a parameter of an effect: hash("<effect>.<param>").
     // Keys of different effects never collide, so a parameter named "speed" can
     // exist in every effect without a prefix.
-    uint32_t paramKey(const char *effectName, const char *paramKey);
-} // namespace hal
+    uint32_t paramKey(const char* effectName, const char* paramKey);
+}

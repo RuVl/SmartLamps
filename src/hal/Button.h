@@ -7,8 +7,10 @@
 
 #include <stdint.h>
 
-namespace hal {
-    enum class Gesture : uint8_t {
+namespace hal
+{
+    enum class Gesture : uint8_t
+    {
         None,
         Click, // next effect
         DoubleClick, // previous effect
@@ -19,7 +21,8 @@ namespace hal {
         LongHold, // 5 s: toggle the lamp on/off
     };
 
-    class Button {
+    class Button
+    {
     public:
         virtual ~Button() = default;
 
@@ -30,30 +33,28 @@ namespace hal {
 
     // For logs.
 
-    inline const char* gestureName(Gesture g) {
+    inline const char* gestureName(Gesture g)
+    {
+        switch (g)
+        {
+        case Gesture::Click: return "click";
 
-        switch (g) {
+        case Gesture::DoubleClick: return "double";
 
-            case Gesture::Click: return "click";
+        case Gesture::TripleClick: return "triple";
 
-            case Gesture::DoubleClick: return "double";
+        case Gesture::HoldStart: return "hold-start";
 
-            case Gesture::TripleClick: return "triple";
+        case Gesture::HoldTick: return "hold";
 
-            case Gesture::HoldStart: return "hold-start";
+        case Gesture::HoldEnd: return "hold-end";
 
-            case Gesture::HoldTick: return "hold";
+        case Gesture::LongHold: return "long-hold";
 
-            case Gesture::HoldEnd: return "hold-end";
-
-            case Gesture::LongHold: return "long-hold";
-
-            default: return "none";
-
+        default: return "none";
         }
-
     }
 
 
-    Button &button();
-} // namespace hal
+    Button& button();
+}

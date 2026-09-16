@@ -16,41 +16,46 @@
 
 #include "Effect.h"
 
-namespace core {
-    enum class Tag : uint8_t {
+namespace core
+{
+    enum class Tag : uint8_t
+    {
         Ambient, // slow, meant to be lived with
         Dynamic, // fast, meant to be watched
         Reactive, // driven by the microphone
         System, // notifications, diagnostics
     };
 
-    struct EffectInfo {
-        const char *name;
+    struct EffectInfo
+    {
+        const char* name;
         Tag tag;
         uint16_t size;
 
-        Effect * (*construct)(void *storage);
+        Effect* (*construct)(void* storage);
 
-        EffectInfo *next;
+        EffectInfo* next;
     };
 
-    class Registry {
+    class Registry
+    {
     public:
-        static void add(EffectInfo &info) noexcept;
+        static void add(EffectInfo& info) noexcept;
 
-        static EffectInfo *head();
+        static EffectInfo* head();
 
-        static EffectInfo *find(const char *name);
+        static EffectInfo* find(const char* name);
 
-        static EffectInfo *at(uint16_t index);
+        static EffectInfo* at(uint16_t index);
 
         static uint16_t count();
     };
 
-    struct Registrar {
-        explicit Registrar(EffectInfo &info) noexcept { Registry::add(info); }
+    struct Registrar
+    {
+        explicit Registrar(EffectInfo& info) noexcept { Registry::add(info); }
     };
-} // namespace core
+}
 
 #define REGISTER_EFFECT(Type, DisplayName, TagValue)                        \
     static_assert(sizeof(Type) <= EFFECT_ARENA_SIZE,                        \

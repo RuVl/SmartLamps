@@ -12,15 +12,19 @@
 
 #include <NeoPixelBus.h>
 
-namespace hal {
-    namespace {
+namespace hal
+{
+    namespace
+    {
         constexpr uint16_t kPixelCount = MATRIX_WIDTH * MATRIX_HEIGHT;
 
         NeoPixelBus<NeoGrbFeature, NeoEsp8266Dma800KbpsMethod> bus(kPixelCount, LED_DATA_PIN);
 
-        class DmaDriver final : public LedDriver {
+        class DmaDriver final : public LedDriver
+        {
         public:
-            void begin(CRGB *pixels, uint16_t count) override {
+            void begin(CRGB* pixels, uint16_t count) override
+            {
                 pixels_ = pixels;
                 count_ = count < kPixelCount ? count : kPixelCount;
                 bus.Begin();
@@ -28,12 +32,14 @@ namespace hal {
                 bus.Show();
             }
 
-            void show(uint8_t brightness) override {
+            void show(uint8_t brightness) override
+            {
                 if (pixels_ == nullptr || !bus.CanShow()) return;
                 // Brightness is applied while copying, so the frame the effect drew
                 // stays untouched and the next frame starts from full-range colour.
-                for (uint16_t i = 0; i < count_; ++i) {
-                    const CRGB &c = pixels_[i];
+                for (uint16_t i = 0; i < count_; ++i)
+                {
+                    const CRGB& c = pixels_[i];
                     bus.SetPixelColor(i, RgbColor(scale8(c.r, brightness),
                                                   scale8(c.g, brightness),
                                                   scale8(c.b, brightness)));
@@ -44,13 +50,14 @@ namespace hal {
             bool busy() const override { return !bus.CanShow(); }
 
         private:
-            CRGB *pixels_ = nullptr;
+            CRGB* pixels_ = nullptr;
             uint16_t count_ = 0;
         };
-    } // namespace
+    }
 
-    LedDriver &ledDriver() {
+    LedDriver& ledDriver()
+    {
         static DmaDriver instance;
         return instance;
     }
-} // namespace hal
+}

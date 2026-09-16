@@ -17,8 +17,10 @@
 #include "core/Registry.h"
 #include "hal/Database.h"
 
-namespace net::mqtt {
-    namespace {
+namespace net::mqtt
+{
+    namespace
+    {
         constexpr uint32_t kRetryMs = 5000;
         constexpr uint16_t kKeepAliveS = 15;
         constexpr size_t kMaxPayload = 256;
@@ -41,16 +43,18 @@ namespace net::mqtt {
 
         // ---------------------------------------------------------------- outbound --
 
-        void publish(const String &topic, const char *payload, bool retain) {
+        void publish(const String& topic, const char* payload, bool retain)
+        {
             if (!client.connected()) return;
             client.publish(topic.c_str(), 1, retain, payload);
         }
 
-        void publishDiscovery() {
+        void publishDiscovery()
+        {
             // Home Assistant "default" light schema: separate command topics, one
             // JSON state topic read through templates. Matches docs/mqtt.md exactly.
             JsonDocument doc;
-            const String &name = lampName();
+            const String& name = lampName();
             doc["name"] = name;
             doc["uniq_id"] = name;
             doc["~"] = String(F("lamp/")) + name;
@@ -68,7 +72,7 @@ namespace net::mqtt {
             doc["fx_stat_t"] = "~/state";
             doc["fx_val_tpl"] = "{{ value_json.effect }}";
             JsonArray list = doc["fx_list"].to<JsonArray>();
-            for (core::EffectInfo *e = core::Registry::head(); e != nullptr; e = e->next)
+            for (core::EffectInfo* e = core::Registry::head(); e != nullptr; e = e->next)
                 list.add(e->name);
             JsonObject dev = doc["dev"].to<JsonObject>();
             dev["ids"].to<JsonArray>().add(name);
@@ -83,26 +87,37 @@ namespace net::mqtt {
 
         // ----------------------------------------------------------------- inbound --
 
-        void handleCommand(const char *cmd, const String &value) {
-            app::Lamp &lamp = app::lamp();
+        void handleCommand(const char* cmd, const String& value)
+        {
+            app::Lamp& lamp = app::lamp();
 
-            if (strcmp(cmd, "on") == 0) {
+            if (strcmp(cmd, "on") == 0)
+            {
                 lamp.setPower(value == "1" || value.equalsIgnoreCase("on") || value.equalsIgnoreCase("true"));
-            } else if (strcmp(cmd, "brightness") == 0) {
+            }
+            else if (strcmp(cmd, "brightness") == 0)
+            {
                 lamp.setBrightness(uint8_t(constrain(value.toInt(), 0, 100)));
-            } else if (strcmp(cmd, "effect") == 0) {
+            }
+            else if (strcmp(cmd, "effect") == 0)
+            {
                 if (!lamp.selectEffect(value.c_str()))
                     logWarn(String(F("MQTT: неизвестный эффект ")) + value);
-            } else if (strncmp(cmd, "param/", 6) == 0) {
+            }
+            else if (strncmp(cmd, "param/", 6) == 0)
+            {
                 if (!lamp.setParam(cmd + 6, int16_t(value.toInt())))
                     logWarn(String(F("MQTT: неизвестный параметр ")) + (cmd + 6));
-            } else {
+            }
+            else
+            {
                 logWarn(String(F("MQTT: неизвестная команда ")) + cmd);
             }
         }
 
-        void onMessage(char *topic, char *payload, AsyncMqttClientMessageProperties,
-                       size_t len, size_t index, size_t total) {
+        void onMessage(char* topic, char* payload, AsyncMqttClientMessageProperties,
+                       size_t len, size_t index, size_t total)
+        {
             // Commands are short; anything fragmented or oversized is not one.
             if (index != 0 || total != len || len > kMaxPayload) return;
             if (strncmp(topic, g_cmdPrefix.c_str(), g_cmdPrefix.length()) != 0) return;
@@ -115,7 +130,8 @@ namespace net::mqtt {
             handleCommand(topic + g_cmdPrefix.length(), value);
         }
 
-        void onConnect(bool) {
+        void onConnect(bool)
+        {
             logInfo(F("MQTT: подключено"));
             client.subscribe((g_cmdPrefix + '#').c_str(), 1);
             publish(topic("avail"), "online", true);
@@ -123,15 +139,17 @@ namespace net::mqtt {
             g_wantDiscovery = true;
         }
 
-        void onDisconnect(AsyncMqttClientDisconnectReason reason) {
+        void onDisconnect(AsyncMqttClientDisconnectReason reason)
+        {
             logWarn(String(F("MQTT: отключено, причина ")) + int(reason));
         }
-    } // namespace
+    }
 
     // ------------------------------------------------------------------ public --
 
-    void begin() {
-        GyverDBFile &db = hal::database();
+    void begin()
+    {
+        GyverDBFile& db = hal::database();
         db.init(kMqttHost, "");
         db.init(kMqttPort, 1883);
         db.init(kMqttUser, "");
@@ -145,8 +163,9 @@ namespace net::mqtt {
 
     bool configured() { return !hal::database().get(kMqttHost).toString().isEmpty(); }
 
-    void reconnect() {
-        GyverDBFile &db = hal::database();
+    void reconnect()
+    {
+        GyverDBFile& db = hal::database();
         g_host = db.get(kMqttHost).toString();
         g_host.trim();
         if (g_host.isEmpty()) return;
@@ -171,30 +190,34 @@ namespace net::mqtt {
         client.connect();
     }
 
-    void tick(uint32_t nowMs) {
-        if (g_wantDiscovery && client.connected()) {
+    void tick(uint32_t nowMs)
+    {
+        if (g_wantDiscovery && client.connected())
+        {
             g_wantDiscovery = false;
             publishDiscovery();
             publishState();
         }
         if (!client.connected() && configured() && WiFi.status() == WL_CONNECTED &&
-            nowMs - g_lastAttempt >= kRetryMs) {
+            nowMs - g_lastAttempt >= kRetryMs)
+        {
             reconnect();
         }
     }
 
     bool connected() { return client.connected(); }
 
-    void publishState() {
+    void publishState()
+    {
         if (!client.connected()) return;
-        app::Lamp &lamp = app::lamp();
+        app::Lamp& lamp = app::lamp();
 
         JsonDocument doc;
         doc["on"] = lamp.isOn();
         doc["brightness"] = lamp.brightness();
         doc["effect"] = lamp.effectName();
         JsonObject params = doc["params"].to<JsonObject>();
-        for (core::Param *p = lamp.params(); p != nullptr; p = p->next())
+        for (core::Param* p = lamp.params(); p != nullptr; p = p->next())
             params[p->key()] = p->get();
         doc["fps"] = lamp.fps();
         doc["rssi"] = WiFi.RSSI();
@@ -203,4 +226,4 @@ namespace net::mqtt {
         serializeJson(doc, out);
         publish(topic("state"), out.c_str(), true);
     }
-} // namespace net::mqtt
+}

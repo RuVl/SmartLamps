@@ -2,14 +2,17 @@
 
 #include <algorithm>
 
-namespace core {
-    Param::Param(Effect &owner, const char *key, const char *label,
+namespace core
+{
+    Param::Param(Effect& owner, const char* key, const char* label,
                  int16_t min, int16_t max, int16_t def)
-        : key_(key), label_(label), min_(min), max_(max), def_(def), value_(def) {
+        : key_(key), label_(label), min_(min), max_(max), def_(def), value_(def)
+    {
         owner.addParam(this);
     }
 
-    bool Param::set(int16_t v) {
+    bool Param::set(int16_t v)
+    {
         v = std::clamp(v, min_, max_);
 
         // Deliberately a load followed by a store rather than exchange(): the
@@ -22,9 +25,10 @@ namespace core {
         return changed;
     }
 
-    void Effect::addParam(Param *p) {
+    void Effect::addParam(Param* p)
+    {
         if (paramsTail_ == nullptr) params_ = p;
         else paramsTail_->next_ = p;
         paramsTail_ = p;
     }
-} // namespace core
+}

@@ -7,6 +7,7 @@
 
 #include <GyverDBFile.h>
 
-namespace hal {
-    GyverDBFile &database();
-} // namespace hal
+namespace hal
+{
+    GyverDBFile& database();
+}

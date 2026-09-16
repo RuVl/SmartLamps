@@ -11,11 +11,14 @@
 
 #include "Matrix.h"
 
-namespace core {
-    class Frame {
+namespace core
+{
+    class Frame
+    {
     public:
-        Frame(CRGB *pixels, const uint16_t *indexMap, const Geometry &geometry)
-            : pixels_(pixels), map_(indexMap), geometry_(geometry) {
+        Frame(CRGB* pixels, const uint16_t* indexMap, const Geometry& geometry)
+            : pixels_(pixels), map_(indexMap), geometry_(geometry)
+        {
         }
 
         [[nodiscard]] uint8_t width() const { return geometry_.width; }
@@ -24,19 +27,21 @@ namespace core {
 
         // Strip index of a matrix coordinate. Out-of-range coordinates clamp to
         // the last pixel rather than corrupting memory.
-        [[nodiscard]] uint16_t xy(uint8_t x, uint8_t y) const {
+        [[nodiscard]] uint16_t xy(uint8_t x, uint8_t y) const
+        {
             if (x >= geometry_.width || y >= geometry_.height) return count() - 1;
             return map_[(uint16_t(y) * geometry_.width) + x];
         }
 
-        [[nodiscard]] CRGB &at(uint8_t x, uint8_t y) const { return pixels_[xy(x, y)]; }
+        [[nodiscard]] CRGB& at(uint8_t x, uint8_t y) const { return pixels_[xy(x, y)]; }
 
         // Linear access, for effects that do not care about geometry.
-        [[nodiscard]] CRGB &operator[](uint16_t i) const {
+        [[nodiscard]] CRGB& operator[](uint16_t i) const
+        {
             return pixels_[i < count() ? i : count() - 1];
         }
 
-        [[nodiscard]] CRGB *raw() const { return pixels_; }
+        [[nodiscard]] CRGB* raw() const { return pixels_; }
 
         // These are const because a Frame is a view: they change the pixels it
         // refers to, not the Frame itself — the same rule std::span follows.
@@ -48,8 +53,8 @@ namespace core {
         void scale(uint8_t factor) const { nscale8(pixels_, count(), factor); }
 
     private:
-        CRGB *pixels_;
-        const uint16_t *map_;
+        CRGB* pixels_;
+        const uint16_t* map_;
         Geometry geometry_;
     };
-} // namespace core
+}

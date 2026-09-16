@@ -15,7 +15,7 @@ Branch `dev` is the v2 rebuild; `main` holds the previous, superseded implementa
 pio run -e esp32s3          # lamp A (default env)
 pio run -e d1_mini          # lamp B
 pio test -e native          # core tests on the host — run these before touching core/
-pio run -e sim && .pio/build/sim/program --serve   # effect preview at http://localhost:8266 (or --tty)
+pio run -e sim && .pio/build/sim/program   # effect preview at http://localhost:8266 (or --tty)
 pio run -e esp32s3 -t upload
 pio device monitor -b 115200   # 74880 on d1_mini
 ```

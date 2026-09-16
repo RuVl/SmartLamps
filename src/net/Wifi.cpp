@@ -8,11 +8,13 @@
 #include "Ota.h"
 #include "hal/Database.h"
 
-namespace net::wifi {
-    namespace {
+namespace net::wifi
+{
+    namespace
+    {
         // Access point password. Nobody wants an open AP in the block of flats; the
         // name is the lamp's own, so two lamps never collide.
-        constexpr const char *kApPass = "smartlamp";
+        constexpr const char* kApPass = "smartlamp";
         constexpr uint16_t kConnectTimeoutS = 20;
         // If STA is lost for this long the AP comes back, so the lamp stays
         // reachable when the router is down and not only when it never came up.
@@ -20,19 +22,22 @@ namespace net::wifi {
 
         uint32_t g_lostSince = 0;
 
-        void onConnected() {
+        void onConnected()
+        {
             logInfo(String(F("WiFi: подключено, IP ")) + WiFi.localIP().toString());
             ota::start();
             mqtt::reconnect();
         }
 
-        void onFailed() {
+        void onFailed()
+        {
             logWarn(F("WiFi: не удалось подключиться, точка доступа открыта"));
         }
-    } // namespace
+    }
 
-    void begin() {
-        GyverDBFile &db = hal::database();
+    void begin()
+    {
+        GyverDBFile& db = hal::database();
         db.init(kWifiSsid, "");
         db.init(kWifiPass, "");
 
@@ -56,10 +61,12 @@ namespace net::wifi {
         reconnect();
     }
 
-    void reconnect() {
-        GyverDBFile &db = hal::database();
+    void reconnect()
+    {
+        GyverDBFile& db = hal::database();
         const String ssid = db.get(kWifiSsid).toString();
-        if (ssid.isEmpty()) {
+        if (ssid.isEmpty())
+        {
             logInfo(F("WiFi: сеть не задана, работаю точкой доступа"));
             WiFiConnector.connect("");
             return;
@@ -68,15 +75,18 @@ namespace net::wifi {
         WiFiConnector.connect(ssid, db.get(kWifiPass).toString());
     }
 
-    void tick() {
+    void tick()
+    {
         WiFiConnector.tick();
 
-        if (connected()) {
+        if (connected())
+        {
             g_lostSince = 0;
             return;
         }
         if (g_lostSince == 0) g_lostSince = millis();
-        if (!accessPointUp() && millis() - g_lostSince >= kReopenApAfterMs) {
+        if (!accessPointUp() && millis() - g_lostSince >= kReopenApAfterMs)
+        {
             WiFi.mode(WIFI_AP_STA);
             WiFi.softAP(lampName().c_str(), kApPass);
             logWarn(F("WiFi: сеть потеряна, точка доступа открыта снова"));
@@ -86,4 +96,4 @@ namespace net::wifi {
     bool connected() { return WiFiConnector.connected(); }
 
     bool accessPointUp() { return (WiFi.getMode() & WIFI_AP) != 0; }
-} // namespace net::wifi
+}

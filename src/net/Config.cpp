@@ -8,22 +8,26 @@
 
 #include "hal/Database.h"
 
-namespace net {
-    namespace {
+namespace net
+{
+    namespace
+    {
         String g_lampName;
         String g_pairName;
 
-        String defaultName() {
+        String defaultName()
+        {
             uint8_t mac[6];
             WiFi.macAddress(mac);
             char buf[16];
             snprintf(buf, sizeof(buf), "lamp-%02x%02x", mac[4], mac[5]);
             return String(buf);
         }
-    } // namespace
+    }
 
-    void refreshNames() {
-        GyverDBFile &db = hal::database();
+    void refreshNames()
+    {
+        GyverDBFile& db = hal::database();
         db.init(kLampName, "");
         db.init(kPairName, "");
         String name = db.get(kLampName).toString();
@@ -33,17 +37,20 @@ namespace net {
         g_pairName.trim();
     }
 
-    const String &lampName() {
+    const String& lampName()
+    {
         if (g_lampName.isEmpty()) refreshNames();
         return g_lampName;
     }
 
-    const String &pairName() {
+    const String& pairName()
+    {
         if (g_lampName.isEmpty()) refreshNames();
         return g_pairName;
     }
 
-    String topicOf(const String &name, const char *suffix) {
+    String topicOf(const String& name, const char* suffix)
+    {
         String t;
         t.reserve(6 + name.length() + strlen(suffix));
         t += F("lamp/");
@@ -52,4 +59,4 @@ namespace net {
         t += suffix;
         return t;
     }
-} // namespace net
+}

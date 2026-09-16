@@ -6,8 +6,9 @@
 
 #include <stdint.h>
 
-namespace net {
+namespace net
+{
     void begin();
 
     void tick(uint32_t nowMs);
-} // namespace net
+}

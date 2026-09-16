@@ -5,7 +5,8 @@
 #include <Arduino.h>
 #include <StringUtils.h>
 
-namespace net {
+namespace net
+{
     // Keys the web panel binds widgets to. The panel reads and writes these in
     // the database directly; the code reads them back when it needs a value.
     constexpr size_t kWifiSsid = su::SH("wifi_ssid");
@@ -28,14 +29,14 @@ namespace net {
     constexpr size_t kIdLog = su::SH("ui_log");
 
     // "lamp-a4f2" from the MAC until the owner names it in the panel.
-    const String &lampName();
+    const String& lampName();
 
-    const String &pairName();
+    const String& pairName();
 
     void refreshNames();
 
     // "lamp/<name>/<suffix>"
-    String topicOf(const String &name, const char *suffix);
+    String topicOf(const String& name, const char* suffix);
 
-    inline String topic(const char *suffix) { return topicOf(lampName(), suffix); }
-} // namespace net
+    inline String topic(const char* suffix) { return topicOf(lampName(), suffix); }
+}

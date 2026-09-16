@@ -12,12 +12,14 @@
 #include "core/Registry.h"
 #include "hal/Button.h"
 
-namespace app {
+namespace app
+{
     // What the corner pixel tells the owner. Anything but Ok is drawn over the
     // effect so the lamp can be diagnosed without opening the case.
     enum class Status : uint8_t { Ok, AccessPoint, NoWifi, NoBroker, Updating };
 
-    class Lamp {
+    class Lamp
+    {
     public:
         void begin();
 
@@ -40,18 +42,18 @@ namespace app {
 
         void selectEffect(uint16_t index);
 
-        bool selectEffect(const char *name);
+        bool selectEffect(const char* name);
 
         void nextEffect();
 
         void prevEffect();
 
         [[nodiscard]] uint16_t effectIndex() const { return effectIndex_; }
-        [[nodiscard]] const char *effectName() const { return info_ ? info_->name : ""; }
-        [[nodiscard]] core::Param *params() const { return effect_ ? effect_->params() : nullptr; }
+        [[nodiscard]] const char* effectName() const { return info_ ? info_->name : ""; }
+        [[nodiscard]] core::Param* params() const { return effect_ ? effect_->params() : nullptr; }
 
         // Sets a parameter of the active effect by key. False if there is none.
-        bool setParam(const char *key, int16_t value);
+        bool setParam(const char* key, int16_t value);
 
         void setStatus(Status s) { status_ = s; }
         [[nodiscard]] Status status() const { return status_; }
@@ -66,15 +68,15 @@ namespace app {
 
         core::Frame frameOf();
 
-        void activate(core::EffectInfo *info);
+        void activate(core::EffectInfo* info);
 
-        void loadParams(core::EffectInfo *info);
+        void loadParams(core::EffectInfo* info);
 
         void handle(hal::Gesture g, uint32_t nowMs);
 
-        void applyTransition(uint16_t dtMs, uint8_t &brightnessOut);
+        void applyTransition(uint16_t dtMs, uint8_t& brightnessOut);
 
-        void drawStatus(core::Frame &f, uint32_t nowMs);
+        void drawStatus(core::Frame& f, uint32_t nowMs);
 
         void markChanged() { changed_ = true; }
 
@@ -82,8 +84,8 @@ namespace app {
         static constexpr uint16_t kFrameIntervalMs = 1000 / 60;
         static constexpr uint16_t kTransitionMs = 300;
         static constexpr uint8_t kStatusMinBrightness = 24;
-    // Holding the pad sweeps 0→100 in about three seconds.
-    static constexpr uint16_t kHoldStepMs = 30;
+        // Holding the pad sweeps 0→100 in about three seconds.
+        static constexpr uint16_t kHoldStepMs = 30;
 
         CRGB pixels_[kPixelCount] = {};
         uint16_t indexMap_[kPixelCount] = {};
@@ -91,9 +93,9 @@ namespace app {
 
         // The active effect is built here, never on the heap.
         alignas(8) uint8_t arena_[EFFECT_ARENA_SIZE] = {};
-        core::Effect *effect_ = nullptr;
-        core::EffectInfo *info_ = nullptr;
-        core::EffectInfo *pending_ = nullptr;
+        core::Effect* effect_ = nullptr;
+        core::EffectInfo* info_ = nullptr;
+        core::EffectInfo* pending_ = nullptr;
         uint16_t effectIndex_ = 0;
 
         bool on_ = true;
@@ -113,5 +115,5 @@ namespace app {
         uint16_t fps_ = 0;
     };
 
-    Lamp &lamp();
-} // namespace app
+    Lamp& lamp();
+}

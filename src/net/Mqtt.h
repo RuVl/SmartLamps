@@ -2,7 +2,8 @@
 
 #include <stdint.h>
 
-namespace net::mqtt {
+namespace net::mqtt
+{
     void begin();
 
     void tick(uint32_t nowMs);
@@ -15,4 +16,4 @@ namespace net::mqtt {
 
     // Publishes the retained JSON state. Called whenever the lamp changed.
     void publishState();
-} // namespace net::mqtt
+}

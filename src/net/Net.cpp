@@ -10,13 +10,16 @@
 #include "Wifi.h"
 #include "app/Lamp.h"
 
-namespace net {
-    namespace {
+namespace net
+{
+    namespace
+    {
         constexpr size_t kLogBytes = 1024;
         sets::Logger g_log(kLogBytes);
         bool g_logDirty = false;
 
-        void append(const String &prefix, const String &s) {
+        void append(const String& prefix, const String& s)
+        {
             g_log.print(prefix);
             g_log.println(s);
             Serial.println(s);
@@ -24,26 +27,31 @@ namespace net {
         }
 
         // One place decides what the corner pixel shows.
-        void updateStatus() {
-            app::Lamp &lamp = app::lamp();
+        void updateStatus()
+        {
+            app::Lamp& lamp = app::lamp();
             if (ota::active()) return; // OTA sets its own status and owns it until reboot
 
             app::Status s = app::Status::Ok;
-            if (!wifi::connected()) {
+            if (!wifi::connected())
+            {
                 s = wifi::accessPointUp() ? app::Status::AccessPoint : app::Status::NoWifi;
-            } else if (mqtt::configured() && !mqtt::connected()) {
+            }
+            else if (mqtt::configured() && !mqtt::connected())
+            {
                 s = app::Status::NoBroker;
             }
             lamp.setStatus(s);
         }
-    } // namespace
+    }
 
-    sets::Logger &log() { return g_log; }
-    void logInfo(const String &s) { append(sets::Logger::info(), s); }
-    void logWarn(const String &s) { append(sets::Logger::warn(), s); }
-    void logError(const String &s) { append(sets::Logger::error(), s); }
+    sets::Logger& log() { return g_log; }
+    void logInfo(const String& s) { append(sets::Logger::info(), s); }
+    void logWarn(const String& s) { append(sets::Logger::warn(), s); }
+    void logError(const String& s) { append(sets::Logger::error(), s); }
 
-    void begin() {
+    void begin()
+    {
         refreshNames();
         logInfo(String(F("Лампа ")) + lampName());
 
@@ -55,7 +63,8 @@ namespace net {
         mqtt::begin();
     }
 
-    void tick(uint32_t nowMs) {
+    void tick(uint32_t nowMs)
+    {
         wifi::tick();
         web::tick();
         mqtt::tick(nowMs);
@@ -68,4 +77,4 @@ namespace net {
         if (app::lamp().consumeChanged()) mqtt::publishState();
         if (g_logDirty && web::pushLog()) g_logDirty = false;
     }
-} // namespace net
+}

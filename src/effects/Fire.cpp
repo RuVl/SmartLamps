@@ -1,35 +1,31 @@
-// Fire — the reference effect.
-//
-// Every convention a new effect should follow is visible here, and
-// docs/writing-effects.md walks through this file line by line. Nothing about
-// this effect is registered anywhere else: the REGISTER_EFFECT line at the
-// bottom is what puts it in the menu, in the database and on MQTT.
-
 #include <FastLED.h>
 
 #include "core/Registry.h"
 
-namespace {
-    struct Fire final : core::Effect {
-        // Declaration order is the order the sliders appear in the web panel.
-        //          owner, key,       label,            min, max, default
+namespace
+{
+    struct Fire final : core::Effect
+    {
         core::Param speed{*this, "speed", "Скорость", 1, 100, 40};
         core::Param cooling{*this, "cooling", "Остывание", 10, 100, 55};
         core::Param spark{*this, "spark", "Искры", 10, 200, 120};
         core::Param hue{*this, "hue", "Оттенок пламени", 0, 60, 10};
 
-        void begin(core::Frame &f) override {
+        void begin(core::Frame& f) override
+        {
             for (uint16_t i = 0; i < f.count(); ++i) heat_[i] = 0;
         }
 
-        void render(core::Frame &f, uint16_t dtMs) override {
+        void render(core::Frame& f, uint16_t dtMs) override
+        {
             // Simulation runs on its own clock. The lamp renders at a fixed rate,
             // so an effect must never assume "one call == one step" — it advances
             // by the time that actually passed. This is why speed looks the same
             // on the S3 and on the ESP8266.
             const uint16_t stepMs = uint16_t(1000 / (10 + int(speed)));
             accumulator_ += dtMs;
-            while (accumulator_ >= stepMs) {
+            while (accumulator_ >= stepMs)
+            {
                 accumulator_ -= stepMs;
                 advance(f);
             }
@@ -38,16 +34,19 @@ namespace {
 
     private:
         // One column of the matrix is one independent flame.
-        void advance(core::Frame &f) {
+        void advance(core::Frame& f)
+        {
             const uint8_t w = f.width();
             const uint8_t h = f.height();
 
-            for (uint8_t x = 0; x < w; ++x) {
-                uint8_t *col = &heat_[size_t(x) * h];
+            for (uint8_t x = 0; x < w; ++x)
+            {
+                uint8_t* col = &heat_[size_t(x) * h];
 
                 // Cool every cell a little; the taller the matrix, the less each
                 // step may take, or the flame never reaches the top.
-                for (uint8_t y = 0; y < h; ++y) {
+                for (uint8_t y = 0; y < h; ++y)
+                {
                     const uint8_t loss = random8(0, uint8_t((int(cooling) * 10) / h + 2));
                     col[y] = qsub8(col[y], loss);
                 }
@@ -62,10 +61,12 @@ namespace {
             }
         }
 
-        void draw(core::Frame &f) {
+        void draw(core::Frame& f)
+        {
             const uint8_t base = uint8_t(hue);
             for (uint8_t x = 0; x < f.width(); ++x)
-                for (uint8_t y = 0; y < f.height(); ++y) {
+                for (uint8_t y = 0; y < f.height(); ++y)
+                {
                     const uint8_t t = heat_[(size_t(x) * f.height()) + y];
                     // HeatColor gives the classic black-red-yellow-white ramp;
                     // the hue parameter tints it towards green or violet flame.
@@ -78,6 +79,6 @@ namespace {
         uint8_t heat_[MATRIX_WIDTH * MATRIX_HEIGHT] = {};
         uint16_t accumulator_ = 0;
     };
-} // namespace
+}
 
 REGISTER_EFFECT(Fire, "Огонь", ::core::Tag::Ambient)

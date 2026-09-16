@@ -71,7 +71,7 @@ namespace {
         TEST_ASSERT_FALSE(isValid(geo(Corner::TopRight, Direction::Right)));
         TEST_ASSERT_TRUE(isValid(geo(Corner::BottomLeft, Direction::Up)));
     }
-} // namespace
+}
 
 int main() {
     UNITY_BEGIN();

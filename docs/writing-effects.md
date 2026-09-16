@@ -21,7 +21,7 @@ struct MyEffect final : core::Effect {
     }
 };
 
-}  // namespace
+} 
 
 REGISTER_EFFECT(MyEffect, "Моё имя", ::core::Tag::Ambient)
 ```
