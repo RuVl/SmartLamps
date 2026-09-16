@@ -20,11 +20,8 @@ namespace hal
 
         virtual void setInt(uint32_t key, int32_t value) = 0;
 
-
         // Creates the key with `value` if it does not exist yet. The web panel
-
         // binds widgets to keys, so a key has to exist before it can be shown.
-
         virtual void initInt(uint32_t key, int32_t value) = 0;
 
         virtual const char* getString(uint32_t key, const char* fallback) = 0;
@@ -43,5 +40,21 @@ namespace hal
     // Stable key for a parameter of an effect: hash("<effect>.<param>").
     // Keys of different effects never collide, so a parameter named "speed" can
     // exist in every effect without a prefix.
-    uint32_t paramKey(const char* effectName, const char* paramKey);
+    inline uint32_t paramKey(const char* effectName, const char* paramKey)
+    {
+        uint32_t h = 2166136261u;
+        auto mix = [&h](const char* s)
+        {
+            while (*s)
+            {
+                h ^= uint8_t(*s++);
+                h *= 16777619u;
+            }
+        };
+        mix(effectName);
+        h ^= uint8_t('.');
+        h *= 16777619u;
+        mix(paramKey);
+        return h;
+    }
 }

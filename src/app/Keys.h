@@ -1,7 +1,7 @@
 #pragma once
 // Storage keys for the lamp's own state. Shared with the web panel, whose
 // widgets bind to these keys directly so that Settings' own, rate-limited
-// update channel keeps the panel in sync — no unsolicited pushes.
+// update channel keeps the panel in sync - no unsolicited pushes.
 //
 // Effect parameters get their keys from hal::paramKey and never collide.
 

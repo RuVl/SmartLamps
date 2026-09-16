@@ -23,14 +23,12 @@ namespace core
     uint32_t estimateCurrent(const CRGB* pixels, uint16_t count, uint8_t brightness)
     {
         const uint32_t mW = calculate_unscaled_power_mW(pixels, count);
-        return ((mW * brightness) / 255) / kSupplyVolts;
+        return mW * brightness / 255 / kSupplyVolts;
     }
 
-    uint8_t limitBrightness(const CRGB* pixels, uint16_t count,
-                            uint8_t brightness, uint16_t limitMa)
+    uint8_t limitBrightness(const CRGB* pixels, uint16_t count, uint8_t brightness, uint16_t limitMa)
     {
         if (limitMa == 0) return brightness;
-        return calculate_max_brightness_for_power_vmA(pixels, count, brightness,
-                                                      kSupplyVolts, limitMa);
+        return calculate_max_brightness_for_power_vmA(pixels, count, brightness, kSupplyVolts, limitMa);
     }
 }

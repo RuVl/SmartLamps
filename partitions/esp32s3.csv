@@ -1,7 +1,7 @@
-# ESP32-S3 N16R8 — 16 MB flash.
+# ESP32-S3 N16R8 - 16 MB flash.
 # Two OTA slots, a filesystem for the settings database, and a slot reserved
 # for the esp-sr wake word models (phase 7). Reserving it now avoids a
-# repartition — and a factory reset — later.
+# repartition - and a factory reset - later.
 # name,     type, subtype,  offset,   size
 nvs,        data, nvs,      0x9000,   0x5000
 otadata,    data, ota,      0xe000,   0x2000

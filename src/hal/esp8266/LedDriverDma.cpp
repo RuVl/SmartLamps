@@ -5,7 +5,7 @@
 // the frame to DMA instead. The cost is the pin: the DMA method is wired to
 // GPIO3 (RX) in hardware and ignores whatever pin it is given.
 //
-// FastLED stays in the build as the colour library — only the transport
+// FastLED stays in the build as the colour library - only the transport
 // changes. See docs/adr/0003-hardware-led-transport.md.
 
 #include "hal/LedDriver.h"

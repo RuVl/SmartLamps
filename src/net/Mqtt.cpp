@@ -28,7 +28,7 @@ namespace net::mqtt
         AsyncMqttClient client;
 
         // AsyncMqttClient stores the pointers it is given, not copies. These live as
-        // long as the client does — handing it a temporary String's c_str() is how
+        // long as the client does - handing it a temporary String's c_str() is how
         // the previous firmware ended up with dangling host and credentials.
         String g_host;
         String g_user;

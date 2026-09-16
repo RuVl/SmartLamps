@@ -3,7 +3,7 @@
 //
 // ESP32-S3 drives the strip from the RMT peripheral, ESP8266 from I2S DMA via
 // NeoPixelBus. Both hand the frame to hardware and return immediately without
-// blocking interrupts — which is what keeps the async web server intact. See
+// blocking interrupts - which is what keeps the async web server intact. See
 // docs/adr/0003-hardware-led-transport.md.
 
 #include <stdint.h>

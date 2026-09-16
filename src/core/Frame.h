@@ -3,7 +3,7 @@
 //
 // Frame owns nothing: the pixel buffer and the index map live in the render
 // task. An effect never touches the strip, never calls show(), and never
-// indexes the raw buffer by coordinates — it goes through at()/xy().
+// indexes the raw buffer by coordinates - it goes through at()/xy().
 
 #include <stdint.h>
 
@@ -44,7 +44,7 @@ namespace core
         [[nodiscard]] CRGB* raw() const { return pixels_; }
 
         // These are const because a Frame is a view: they change the pixels it
-        // refers to, not the Frame itself — the same rule std::span follows.
+        // refers to, not the Frame itself - the same rule std::span follows.
         void clear() const { fill(CRGB::Black); }
         void fill(CRGB color) const { fill_solid(pixels_, count(), color); }
         void fade(uint8_t amount) const { fadeToBlackBy(pixels_, count(), amount); }

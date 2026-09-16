@@ -2,7 +2,7 @@
 // Base class for everything that draws on the matrix.
 //
 // An effect knows about Frame and its own Params. It does not know about the
-// LED driver, the database, the network or Arduino — which is why effects are
+// LED driver, the database, the network or Arduino - which is why effects are
 // testable on the host and identical on both boards.
 
 #include <stdint.h>

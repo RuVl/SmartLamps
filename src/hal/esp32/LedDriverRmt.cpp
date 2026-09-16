@@ -1,7 +1,7 @@
 // ESP32-S3: the strip is driven by the RMT peripheral.
 //
 // FastLED hands the frame to RMT, which clocks the bits out with hardware
-// timing. Interrupts stay enabled throughout — which is the whole reason the
+// timing. Interrupts stay enabled throughout - which is the whole reason the
 // lamp moved to this chip. See docs/adr/0003-hardware-led-transport.md.
 
 #include "hal/LedDriver.h"

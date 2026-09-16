@@ -23,7 +23,7 @@ Checks: >
 #
 # modernize-deprecated-headers  <stdint.h> over <cstdint>. The project uses the
 #   unqualified names (uint16_t, not std::uint16_t) throughout, and <cstdint>
-#   only guarantees those inside namespace std — putting them in the global
+#   only guarantees those inside namespace std - putting them in the global
 #   namespace is allowed, not required. <stdint.h> guarantees exactly what the
 #   code uses, and matches the Arduino headers it sits next to.
 #

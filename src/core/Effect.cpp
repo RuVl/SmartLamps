@@ -18,7 +18,7 @@ namespace core
         // Deliberately a load followed by a store rather than exchange(): the
         // xtensa-lx106 toolchain has no 16-bit atomic read-modify-write and fails
         // to link __atomic_exchange_2. Nothing here needs read-modify-write
-        // semantics — the only guarantee a reader needs is a value that is never
+        // semantics - the only guarantee a reader needs is a value that is never
         // torn, and plain aligned load/store provides that on both targets.
         const bool changed = value_.load(std::memory_order_relaxed) != v;
         if (changed) value_.store(v, std::memory_order_relaxed);

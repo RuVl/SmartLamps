@@ -1,0 +1,131 @@
+<!doctype html>
+<head>
+    <meta charset="utf-8">
+    <title>SmartLamp sim</title>
+    <style>
+        body {
+            margin: 0;
+            background: #141318;
+            color: #ddd;
+            font: 14px system-ui;
+            display: flex;
+            gap: 28px;
+            padding: 24px
+        }
+
+        canvas {
+            image-rendering: pixelated;
+            width: 480px;
+            height: 480px;
+            background: #000;
+            border: 1px solid #333
+        }
+
+        label {
+            display: block;
+            margin: 10px 0 2px;
+            color: #aaa
+        }
+
+        input[type=range] {
+            width: 260px
+        }
+
+        select {
+            font: inherit;
+            padding: 4px
+        }
+
+        #fps {
+            color: #777;
+            margin-top: 16px
+        }
+    </style>
+</head>
+<body>
+<canvas id="canvas" width="16" height="16"></canvas>
+<div>
+    <label for="fx">Эффект</label>
+    <select id="fx"></select>
+
+    <label for="br">Яркость <span id="bv"></span>%</label>
+    <input id="br" type="range" min="0" max="100">
+
+    <div id="params"></div>
+    <div id="fps"></div>
+</div>
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = ctx.createImageData(16, 16);
+
+    const query = (url, body) => fetch(url, {method: 'POST', body: body});
+
+    async function load() {
+        const state = await (await fetch('/api/state')).json();
+
+        const fx = document.getElementById('fx');
+        fx.innerHTML = '';
+        for (const effect of state.effects) {
+            const o = document.createElement('option');
+            o.textContent = effect;
+            o.selected = effect === state.effect;
+            fx.append(o)
+        }
+        fx.onchange = () => query('/api/effect', fx.value).then(load);
+
+        const br = document.getElementById('br');
+        const bv = document.getElementById('bv');
+        br.value = state.brightness;
+        bv.textContent = state.brightness;
+        br.oninput = () => {
+            bv.textContent = br.value;
+            query('/api/brightness', br.value)
+        };
+
+        const params = document.getElementById('params');
+        params.innerHTML = '';
+        for (const param of state.params) {
+            const s = document.createElement('span');
+            s.textContent = param.value;
+
+            const l = document.createElement('label');
+            l.textContent = param.label + ' ';
+            l.htmlFor = param.id;
+            l.append(s);
+
+            const i = document.createElement('input');
+            i.id = param.id;
+            i.type = 'range';
+            i.min = param.min;
+            i.max = param.max;
+            i.value = param.value;
+            i.oninput = () => {
+                s.textContent = i.value;
+                query('/api/param', param.key + '=' + i.value)
+            };
+
+            params.append(l, i);
+        }
+    }
+
+    let n = 0, t = performance.now();
+    new EventSource('/events').onmessage = e => {
+        const h = e.data;
+        for (let i = 0; i < 256; i++) {
+            const y = 15 - (i >> 4), x = i & 15, o = (y * 16 + x) * 4;
+            img.data[o] = parseInt(h.substr(i * 6, 2), 16);
+            img.data[o + 1] = parseInt(h.substr(i * 6 + 2, 2), 16);
+            img.data[o + 2] = parseInt(h.substr(i * 6 + 4, 2), 16);
+            img.data[o + 3] = 255
+        }
+        ctx.putImageData(img, 0, 0);
+        if (++n % 60 === 0) {
+            const now = performance.now();
+            fps.textContent = Math.round(60000 / (now - t)) + ' к/с';
+            t = now
+        }
+    };
+    load();
+</script>
+</body>

@@ -1,11 +1,11 @@
 // The settings panel, on GyverLibs Settings.
 //
-// Every widget binds to a database key — the lamp's own state, the effect
+// Every widget binds to a database key - the lamp's own state, the effect
 // parameters, WiFi and MQTT alike. Settings then keeps open panels in sync
 // through its own rate-limited update channel, and the code only reacts when
 // a widget reports a change. There are no unsolicited state pushes from here:
 // on the ESP8266 a burst of WebSocket sends from the loop races the TCP ack
-// path and crashes in AsyncWebSocketClient::_onAck (seen on hardware —
+// path and crashes in AsyncWebSocketClient::_onAck (seen on hardware -
 // use-after-free, Exception 28 in sys context).
 //
 // The parameter sliders are generated from the active effect's Param list, so

@@ -66,24 +66,4 @@ namespace hal
     }
 
     GyverDBFile& database() { return db; }
-
-    // FNV-1a over "<effect>.<param>". Keys of different effects never collide, so
-    // a parameter called "speed" can exist in every effect without a prefix.
-    uint32_t paramKey(const char* effectName, const char* paramKey)
-    {
-        uint32_t h = 2166136261u;
-        auto mix = [&h](const char* s)
-        {
-            while (*s)
-            {
-                h ^= uint8_t(*s++);
-                h *= 16777619u;
-            }
-        };
-        mix(effectName);
-        h ^= uint8_t('.');
-        h *= 16777619u;
-        mix(paramKey);
-        return h;
-    }
 }

@@ -7,3 +7,6 @@ CMakeListsPrivate.txt
 .env
 
 compile_commands.json
+
+# Generated from src/sim/index.html by src/sim/page.py (pre-build script).
+src/sim/page.h

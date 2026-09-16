@@ -2,8 +2,6 @@
 
 #include <string.h>
 
-#include <Arduino.h>
-
 #include "Keys.h"
 #include "core/PostFX.h"
 #include "hal/LedDriver.h"
@@ -81,10 +79,8 @@ namespace app
             if (brightness < kStatusMinBrightness) brightness = kStatusMinBrightness;
         }
 
-        // Effects draw at full range; the supply limit is applied here, once, to
-        // the finished frame.
-        brightness = core::limitBrightness(pixels_, kPixelCount, brightness,
-                                           LED_CURRENT_LIMIT_MA);
+        // Effects draw at full range; the supply limit is applied here, once, to the finished frame.
+        brightness = core::limitBrightness(pixels_, kPixelCount, brightness, LED_CURRENT_LIMIT_MA);
         hal::ledDriver().show(brightness);
 
         ++fpsCounter_;
@@ -276,16 +272,13 @@ namespace app
 
     void Lamp::handle(hal::Gesture g, uint32_t nowMs)
     {
-        if (g != hal::Gesture::None && g != hal::Gesture::HoldTick)
-            Serial.printf("btn: %s (power=%d brightness=%u%% pwm=%u effect=%u)\n",
-                          hal::gestureName(g), on_, brightnessPercent_, brightnessScaled_, effectIndex_);
         switch (g)
         {
         case hal::Gesture::Click: nextEffect();
             break;
         case hal::Gesture::DoubleClick: prevEffect();
             break;
-        case hal::Gesture::TripleClick: break; // ping — lands with the pairing phase
+        case hal::Gesture::TripleClick: break; // ping - lands with the pairing phase
         case hal::Gesture::HoldStart:
             // Each hold sweeps the opposite way from the previous one, so
             // dimming never means going all the way up first.

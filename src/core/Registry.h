@@ -3,7 +3,7 @@
 //
 // Effects register themselves: REGISTER_EFFECT at the bottom of an effect's
 // .cpp links it into the list before main() runs. There is no enum to extend,
-// no name string to keep in sync and no switch to edit — adding an effect
+// no name string to keep in sync and no switch to edit - adding an effect
 // touches exactly one file.
 //
 // Construction uses placement new into a static arena, so switching effects
@@ -11,8 +11,6 @@
 // instead of failing in the field.
 
 #include <stdint.h>
-
-#include <new>
 
 #include "Effect.h"
 
