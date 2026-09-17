@@ -15,7 +15,7 @@ Branch `dev` is the v2 rebuild; `main` holds the previous, superseded implementa
 pio run -e esp32s3          # lamp A (default env)
 pio run -e d1_mini          # lamp B
 pio test -e native          # core tests on the host — run these before touching core/
-pio run -e sim && .pio/build/sim/program   # effect preview at http://localhost:8266 (or --tty)
+pio run -e sim && .pio/build/sim/program   # effect preview at http://localhost:8266
 pio run -e esp32s3 -t upload
 pio device monitor -b 115200   # 74880 on d1_mini
 ```
@@ -46,6 +46,12 @@ Read `docs/architecture.md` first. The rules that matter when editing:
 - **Effects advance by `dtMs`, not by call count.** The lamp renders at a fixed rate; an
   effect that counts frames slows down under load.
 - **Brightness, gamma and the current limit belong to PostFX**, not to effects.
+- **Effect state is fixed-size.** Particles, trails, heat maps are plain arrays sized at
+  compile time; the whole effect must fit the arena, and it must not allocate in `render`.
+- **Nothing heavy inside a panel callback on ESP8266.** `sets::Builder` callbacks run in the
+  SDK sys context (~1 KB of stack even with `disable_extra4k_at_link_time`): no flash
+  writes, no `WiFi.mode`, no restart — record a `Pending` request and act from `tick()`.
+  Unsolicited WebSocket pushes from `loop()` go through the throttle in `WebUi.cpp`.
 
 `src/effects/Fire.cpp` is the reference effect and is documented line by line in
 `docs/writing-effects.md`. Keep the two in sync when the effect API changes.

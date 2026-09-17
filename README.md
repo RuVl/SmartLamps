@@ -12,12 +12,15 @@ ESP8266, одно дерево исходников, один протокол.
 pio run -e esp32s3            # лампа A
 pio run -e d1_mini            # лампа B
 pio test -e native            # тесты ядра на компьютере
-pio run -e sim                # симулятор: .pio/build/sim/program --serve → localhost:8266
+pio run -e sim                # симулятор: .pio/build/sim/program → http://localhost:8266
 
 pio run -e esp32s3 -t upload
 pio run -e esp32s3 -t uploadfs
 pio device monitor -b 115200
 ```
+
+Пароль точки доступа лампы задаётся в `secrets.ini` (скопировать из `secrets.ini.example`,
+файл не попадает в git). Без него действует пароль по умолчанию из `platformio.ini`.
 
 ## Документация
 
@@ -30,6 +33,7 @@ pio device monitor -b 115200
 | [Вторая лампа на ESP8266](docs/esp8266.md) | что меняется и чего там нет |
 | [Словарь](CONTEXT.md) | термины проекта |
 | [Решения](docs/adr/) | почему Arduino, почему арена, почему аппаратный вывод |
+| [Отложенное](docs/backlog.md) | что решено сделать позже и почему |
 
 ## Железо
 

@@ -10,11 +10,12 @@ src/
   main.cpp     точка входа, только старт
   app/         сборка системы, задачи, состояние лампы
   hal/         LedDriver, Button, Storage — интерфейс + реализация под плату
-    esp32/ esp8266/
+    esp32/ esp8266/ sim/
   core/        Matrix, Frame, Param, Effect, Registry, PostFX
   effects/     по файлу на эффект
   net/         WiFi, Mqtt, WebUi, Ota
   audio/       (этап 6+) I2S, FFT, wake word — только ESP32-S3
+  sim/         симулятор: та же Lamp на хосте, кадр в браузер по SSE
 test/test_core/  тесты ядра на хосте
 ```
 
