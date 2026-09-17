@@ -5,6 +5,25 @@
 
 #ifdef LAMP_BOARD_ESP8266
 #include <coredecls.h>
+
+namespace
+{
+#ifdef LED_DATA_INVERTED
+    constexpr int kLedInverted = 1;
+#else
+    constexpr int kLedInverted = 0;
+#endif
+#ifdef NPB_CONF_4STEP_CADENCE
+    constexpr int kLed4Step = 1;
+#else
+    constexpr int kLed4Step = 0;
+#endif
+#ifdef LED_LEAD_PIXELS
+    constexpr int kLedLeadPixels = LED_LEAD_PIXELS;
+#else
+    constexpr int kLedLeadPixels = 0;
+#endif
+}
 #endif
 
 #ifdef LAMP_BOARD_ESP32S3
@@ -37,21 +56,7 @@ void setup()
 #ifdef LAMP_BOARD_ESP8266
     // The data line's electrical setup, so a log alone tells which build is on the board.
     Serial.printf("led: pin %d inverted=%d 4step=%d lead=%d\n", LED_DATA_PIN,
-#ifdef LED_DATA_INVERTED
-                  1,
-#else
-                  0,
-#endif
-#ifdef NPB_CONF_4STEP_CADENCE
-                  1,
-#else
-                  0,
-#endif
-#ifdef LED_LEAD_PIXELS
-                  LED_LEAD_PIXELS);
-#else
-                  0);
-#endif
+                  kLedInverted, kLed4Step, kLedLeadPixels);
 #endif
     app::lamp().begin();
     Serial.printf("state: power=%d brightness=%u effect=%s\n",
