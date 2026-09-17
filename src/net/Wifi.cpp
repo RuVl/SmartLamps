@@ -14,7 +14,7 @@ namespace net::wifi
     {
         // Access point password. Nobody wants an open AP in the block of flats; the
         // name is the lamp's own, so two lamps never collide.
-        constexpr const char* kApPass = "smartlamp";
+        constexpr const char* kApPass = LAMP_AP_PASS; // from secrets.ini
         constexpr uint16_t kConnectTimeoutS = 20;
         // If STA is lost for this long the AP comes back, so the lamp stays
         // reachable when the router is down and not only when it never came up.
