@@ -49,7 +49,7 @@ Read `docs/architecture.md` first. The rules that matter when editing:
 - **Effect state is fixed-size.** Particles, trails, heat maps are plain arrays sized at
   compile time; the whole effect must fit the arena, and it must not allocate in `render`.
 - **Nothing heavy inside a panel callback on ESP8266.** `sets::Builder` callbacks run in the
-  SDK sys context (~1 KB of stack even with `disable_extra4k_at_link_time`): no flash
+  SDK sys context (5 KB of stack, and only because of `disable_extra4k_at_link_time`): no flash
   writes, no `WiFi.mode`, no restart — record a `Pending` request and act from `tick()`.
   Unsolicited WebSocket pushes from `loop()` go through the throttle in `WebUi.cpp`.
 
