@@ -30,8 +30,11 @@ namespace app
         };
         core::buildIndexMap(indexMap_, geometry_);
 
-        hal::storage().begin();
+        // The strip first: it still shows whatever it latched before the reset
+        // and the bootloader's traffic on the data pin, and mounting the
+        // filesystem takes long enough for that to be visible.
         hal::ledDriver().begin(pixels_, kPixelCount);
+        hal::storage().begin();
         hal::button().begin();
 
         hal::storage().initInt(app::keys::kPower, 1);
