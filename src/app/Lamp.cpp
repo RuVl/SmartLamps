@@ -178,6 +178,7 @@ namespace app
         core::Frame f = frameOf();
         f.clear();
         effect_->begin(f);
+        activated_ = true;
     }
 
     void Lamp::loadParams(core::EffectInfo* info)
@@ -270,6 +271,13 @@ namespace app
     {
         const bool was = changed_;
         changed_ = false;
+        return was;
+    }
+
+    bool Lamp::consumeActivated()
+    {
+        const bool was = activated_;
+        activated_ = false;
         return was;
     }
 

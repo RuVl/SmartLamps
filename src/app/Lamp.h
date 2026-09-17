@@ -61,6 +61,11 @@ namespace app
         // True once after any state change; the network publishes on it.
         bool consumeChanged();
 
+        // True once after a new effect has actually been built in the arena.
+        // selectEffect() only schedules the change; the panel needs the moment
+        // the new Param list exists, which is after the fade-out.
+        bool consumeActivated();
+
         [[nodiscard]] uint16_t fps() const { return fps_; }
 
     private:
@@ -103,6 +108,7 @@ namespace app
         uint8_t brightnessScaled_ = 128;
         Status status_ = Status::Ok;
         bool changed_ = false;
+        bool activated_ = false;
         int8_t holdDirection_ = 1;
         uint32_t lastHoldStepMs_ = 0;
 
