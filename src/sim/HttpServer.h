@@ -20,8 +20,8 @@ class HttpServer
 public:
     static constexpr uint16_t kPixels = MATRIX_WIDTH * MATRIX_HEIGHT;
 
-    // Fills out with kPixels RGB triplets in strip order (the lamp's pixel
-    // buffer order; the page maps it to canvas coordinates itself).
+    // Fills out with kPixels RGB triplets in matrix order: row by row from
+    // the bottom-left, as Frame::at(x, y) sees it.
     using FrameGrabber = std::function<void(uint8_t* out)>;
 
     bool begin(uint16_t port);

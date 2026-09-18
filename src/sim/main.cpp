@@ -45,7 +45,7 @@ int main()
         fprintf(stderr, "sim: cannot listen on %u\n", kPort);
         return 1;
     }
-    http.setFrameGrabber([](uint8_t* out) { hal::simSnapshot(out); });
+    http.setFrameGrabber([](uint8_t* out) { hal::simSnapshot(out, app::lamp().indexMap()); });
 
     while (is_running)
     {
