@@ -11,6 +11,7 @@
 #include <ESP8266WiFi.h>
 #endif
 
+
 #include "Config.h"
 #include "Log.h"
 #include "app/Lamp.h"
@@ -40,6 +41,39 @@ namespace net::mqtt
 
         uint32_t g_lastAttempt = 0;
         bool g_wantDiscovery = false;
+        // "Reconnect" on a live connection: disconnect first, connect again as
+        // soon as the TCP side reports the close - not after the retry period.
+        bool g_reconnectRequested = false;
+
+        // onDisconnect runs from the TCP stack; it records the reason and
+        // tick() writes the log line.
+        volatile int8_t g_reason = 0;
+        volatile bool g_reasonDirty = false; // volatile, not atomic: xtensa-lx106 has no __atomic_exchange_1
+        String g_lastError;
+
+        const __FlashStringHelper* reasonText(AsyncMqttClientDisconnectReason r)
+        {
+            switch (r)
+            {
+            case AsyncMqttClientDisconnectReason::TCP_DISCONNECTED:
+                return F("соединение разорвано - хост недоступен, порт закрыт или брокер молчит");
+            case AsyncMqttClientDisconnectReason::MQTT_UNACCEPTABLE_PROTOCOL_VERSION:
+                return F("брокер не принимает версию протокола");
+            case AsyncMqttClientDisconnectReason::MQTT_IDENTIFIER_REJECTED:
+                return F("брокер отверг идентификатор клиента (имя лампы)");
+            case AsyncMqttClientDisconnectReason::MQTT_SERVER_UNAVAILABLE:
+                return F("брокер недоступен");
+            case AsyncMqttClientDisconnectReason::MQTT_MALFORMED_CREDENTIALS:
+                return F("неверный формат логина или пароля");
+            case AsyncMqttClientDisconnectReason::MQTT_NOT_AUTHORIZED:
+                return F("брокер отверг логин или пароль");
+            case AsyncMqttClientDisconnectReason::ESP8266_NOT_ENOUGH_SPACE:
+                return F("не хватило памяти под пакет");
+            case AsyncMqttClientDisconnectReason::TLS_BAD_FINGERPRINT:
+                return F("отпечаток TLS не совпал");
+            }
+            return F("неизвестная причина");
+        }
 
         // ---------------------------------------------------------------- outbound --
 
@@ -141,7 +175,8 @@ namespace net::mqtt
 
         void onDisconnect(AsyncMqttClientDisconnectReason reason)
         {
-            logWarn(String(F("MQTT: отключено, причина ")) + int(reason));
+            g_reason = int8_t(reason);
+            g_reasonDirty = true;
         }
     }
 
@@ -168,8 +203,18 @@ namespace net::mqtt
         GyverDBFile& db = hal::database();
         g_host = db.get(kMqttHost).toString();
         g_host.trim();
-        if (g_host.isEmpty()) return;
-        if (WiFi.status() != WL_CONNECTED) return;
+        if (g_host.isEmpty())
+        {
+            g_lastError = F("сервер не задан");
+            logInfo(F("MQTT: сервер не задан"));
+            return;
+        }
+        if (WiFi.status() != WL_CONNECTED)
+        {
+            g_lastError = F("нет WiFi");
+            logWarn(F("MQTT: нет WiFi, подключусь после сети"));
+            return;
+        }
 
         g_port = uint16_t(db.get(kMqttPort).toInt());
         g_user = db.get(kMqttUser).toString();
@@ -178,7 +223,15 @@ namespace net::mqtt
         g_willTopic = topic("avail");
         g_cmdPrefix = topic("cmd/");
 
-        if (client.connected()) client.disconnect();
+        if (client.connected())
+        {
+            // connect() on a connected client is a no-op in AsyncMqttClient, and
+            // the TCP close is asynchronous: ask for it and finish from tick().
+            g_reconnectRequested = true;
+            logInfo(F("MQTT: переподключаюсь"));
+            client.disconnect();
+            return;
+        }
 
         client.setServer(g_host.c_str(), g_port);
         client.setClientId(g_clientId.c_str());
@@ -186,12 +239,26 @@ namespace net::mqtt
         client.setWill(g_willTopic.c_str(), 1, true, "offline");
 
         logInfo(String(F("MQTT: подключаюсь к ")) + g_host + ':' + g_port);
+        g_lastError = "";
         g_lastAttempt = millis();
         client.connect();
     }
 
     void tick(uint32_t nowMs)
     {
+        if (g_reasonDirty)
+        {
+            g_reasonDirty = false;
+            const auto reason = AsyncMqttClientDisconnectReason(g_reason);
+            g_lastError = String(reasonText(reason)) + F(" [") + int(reason) + ']';
+            logWarn(String(F("MQTT: отключено: ")) + g_lastError);
+            if (g_reconnectRequested)
+            {
+                g_reconnectRequested = false;
+                g_lastAttempt = 0; // reconnect on this very tick
+            }
+        }
+
         if (g_wantDiscovery && client.connected())
         {
             g_wantDiscovery = false;
@@ -206,6 +273,15 @@ namespace net::mqtt
     }
 
     bool connected() { return client.connected(); }
+
+    String status()
+    {
+        if (client.connected()) return String(F("подключено к ")) + g_host + ':' + g_port;
+        if (!configured()) return F("сервер не задан");
+        String s = F("не подключено");
+        if (!g_lastError.isEmpty()) s += String(F(" · ")) + g_lastError;
+        return s;
+    }
 
     void publishState()
     {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <stdint.h>
+#include <Arduino.h>
 
 namespace net::wifi
 {
@@ -13,4 +13,8 @@ namespace net::wifi
     bool connected();
 
     bool accessPointUp();
+
+    // One line for the panel: IP and RSSI when connected, otherwise what
+    // is going on and the last reason the router gave.
+    String status();
 }
