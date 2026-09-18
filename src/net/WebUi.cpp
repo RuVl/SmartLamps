@@ -79,6 +79,27 @@ namespace net::web
             return hal::database().GyverDB::update(key, s);
         }
 
+        // One widget per Param::Kind. Returns true when the panel changed the value.
+        bool paramWidget(sets::Builder& b, size_t id, const core::Param& p)
+        {
+            switch (p.kind())
+            {
+            case core::Param::Kind::Hue:
+                {
+                    // The slider is tinted with the current hue so the user sees
+                    // what they are picking. Settings cannot recolour a widget
+                    // live, so the tint follows only on the next panel build.
+                    const CRGB c = CHSV(uint8_t(p.get()), 255, 255);
+                    const uint32_t rgb = (uint32_t(c.r) << 16) | (uint32_t(c.g) << 8) | c.b;
+                    return b.Slider(id, p.label(), 0, 255, 1, "", nullptr, rgb);
+                }
+            case core::Param::Kind::Switch: return b.Switch(id, p.label());
+            case core::Param::Kind::Select: return b.Select(id, p.label(), p.options());
+            case core::Param::Kind::Slider: break;
+            }
+            return b.Slider(id, p.label(), p.min(), p.max(), 1);
+        }
+
         void buildLampMenu(sets::Builder& b)
         {
             app::Lamp& lamp = app::lamp();
@@ -105,7 +126,8 @@ namespace net::web
                 for (core::Param* p = lamp.params(); p != nullptr; p = p->next())
                 {
                     const size_t id = hal::paramKey(lamp.effectName(), p->key());
-                    if (b.Slider(id, p->label(), p->min(), p->max(), 1))
+                    // A Switch lands in the database as a bool; toInt() reads it as 0/1.
+                    if (paramWidget(b, id, *p))
                         lamp.setParam(p->key(), int16_t(db.get(id).toInt()));
                 }
             }

@@ -10,9 +10,11 @@ namespace
 {
     struct Test final : core::Effect
     {
-        // 0 black, 1 first pixel red, 2 one white pixel walking by index,
-        // 3 all white at 1/255, 4 all white at 16/255, 5 all red, 6 hue by index.
-        core::Param pattern{*this, "pattern", "Узор", 0, 6, 1};
+        // "White 1/255" is the near-all-zero frame: the hardest case for the
+        // WS2812B zero-pulse timing, the one that lights random pixels when the
+        // level shifter is marginal.
+        core::Param pattern{*this, "pattern", "Узор", core::Select{
+            "Чёрный;Один красный;Бегущий белый;Белый 1/255;Белый 16/255;Красный;Оттенок по индексу", 1}};
 
         void render(core::Frame& f, uint16_t dtMs) override
         {
