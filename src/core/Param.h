@@ -8,6 +8,10 @@
 // Values are plain 16-bit integers held in an atomic. The render task reads
 // them without locking; the network and UI tasks write them. A single 16-bit
 // store is atomic on both targets, so a snapshot is never half-updated.
+//
+// The kind only decides which widget the panel draws. The value, the key, the
+// MQTT topic and the JSON field are the same 16-bit integer for every kind, so
+// a Switch is 0/1 and a Select is the index of the chosen option.
 
 #include <stdint.h>
 
@@ -17,11 +21,27 @@ namespace core
 {
     class Effect;
 
+    // Declaration tags. `core::Param x{*this, "k", "Label", core::Hue{20}};`
+    // reads as what it is, without a Kind argument that could disagree with
+    // the range.
+    struct Hue { int16_t def; };           // 0..255 on the colour wheel
+    struct Switch { bool def; };           // 0 or 1
+    struct Select                          // index into ";"-separated options
+    {
+        const char* options;               // "Вертикально;Горизонтально"
+        int16_t def = 0;
+    };
+
     class Param
     {
     public:
+        enum class Kind : uint8_t { Slider, Hue, Switch, Select };
+
         Param(Effect& owner, const char* key, const char* label,
               int16_t min, int16_t max, int16_t def);
+        Param(Effect& owner, const char* key, const char* label, core::Hue hue);
+        Param(Effect& owner, const char* key, const char* label, core::Switch sw);
+        Param(Effect& owner, const char* key, const char* label, core::Select sel);
 
         // Reads as a number: `if (hue > 128)`, `f.fade(speed)`. The implicit
         // conversion is deliberate and is what makes effect code read like the
@@ -45,16 +65,28 @@ namespace core
         [[nodiscard]] int16_t min() const { return min_; }
         [[nodiscard]] int16_t max() const { return max_; }
         [[nodiscard]] int16_t def() const { return def_; }
+        [[nodiscard]] Kind kind() const { return kind_; }
+
+        // ";"-separated option labels for Kind::Select, nullptr otherwise.
+        [[nodiscard]] const char* options() const { return options_; }
+
+        // Reads a Switch as a bool. Same as `x != 0`, spelled for the reader.
+        [[nodiscard]] bool on() const { return get() != 0; }
 
         [[nodiscard]] Param* next() const { return next_; }
 
     private:
+        Param(Effect& owner, const char* key, const char* label, Kind kind,
+              int16_t min, int16_t max, int16_t def, const char* options);
+
         const char* key_;
         const char* label_;
+        const char* options_;
         int16_t min_;
         int16_t max_;
         int16_t def_;
         std::atomic<int16_t> value_;
+        Kind kind_;
         Param* next_ = nullptr;
 
         friend class Effect;

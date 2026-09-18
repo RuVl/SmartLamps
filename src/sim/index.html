@@ -13,6 +13,24 @@
             padding: 24px
         }
 
+        /* Hue: the same 0..255 range, on a rainbow track (FastLED CHSV order). */
+        input.hue {
+            -webkit-appearance: none;
+            appearance: none;
+            height: 10px;
+            border-radius: 5px;
+            background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)
+        }
+
+        input.hue::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #eee;
+            border: 1px solid #333
+        }
+
         canvas {
             image-rendering: pixelated;
             width: 480px;
@@ -87,23 +105,44 @@
         params.innerHTML = '';
         for (const param of state.params) {
             const s = document.createElement('span');
-            s.textContent = param.value;
 
             const l = document.createElement('label');
             l.textContent = param.label + ' ';
             l.htmlFor = param.id;
             l.append(s);
 
-            const i = document.createElement('input');
+            // Same four kinds as the lamp's panel (core::Param::Kind).
+            let i;
+            const send = (v) => query('/api/param', param.key + '=' + v);
+            if (param.kind === 'select') {
+                i = document.createElement('select');
+                param.options.split(';').forEach((name, idx) => {
+                    const o = document.createElement('option');
+                    o.value = idx;
+                    o.textContent = name;
+                    o.selected = idx === param.value;
+                    i.append(o);
+                });
+                i.onchange = () => send(i.value);
+            } else if (param.kind === 'switch') {
+                i = document.createElement('input');
+                i.type = 'checkbox';
+                i.checked = param.value !== 0;
+                i.onchange = () => send(i.checked ? 1 : 0);
+            } else {
+                i = document.createElement('input');
+                i.type = 'range';
+                i.min = param.min;
+                i.max = param.max;
+                i.value = param.value;
+                if (param.kind === 'hue') i.className = 'hue';
+                s.textContent = param.value;
+                i.oninput = () => {
+                    s.textContent = i.value;
+                    send(i.value);
+                };
+            }
             i.id = param.id;
-            i.type = 'range';
-            i.min = param.min;
-            i.max = param.max;
-            i.value = param.value;
-            i.oninput = () => {
-                s.textContent = i.value;
-                query('/api/param', param.key + '=' + i.value)
-            };
 
             params.append(l, i);
         }
