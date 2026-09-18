@@ -68,6 +68,11 @@ namespace app
 
         [[nodiscard]] uint16_t fps() const { return fps_; }
 
+        // Supply limit in mA, LED_CURRENT_LIMIT_MA by default. The simulator
+        // toggles it to show the lamp with and without the limiter.
+        void setCurrentLimit(uint16_t mA) { currentLimitMa_ = mA; }
+        [[nodiscard]] uint16_t currentLimit() const { return currentLimitMa_; }
+
         // The strip index of every (x, y), row by row from the bottom-left -
         // for whoever needs to read the pixel buffer back in matrix order.
         [[nodiscard]] const uint16_t* indexMap() const { return indexMap_; }
@@ -110,6 +115,7 @@ namespace app
         bool on_ = true;
         uint8_t brightnessPercent_ = 50;
         uint8_t brightnessScaled_ = 128;
+        uint16_t currentLimitMa_ = LED_CURRENT_LIMIT_MA;
         Status status_ = Status::Ok;
         bool changed_ = false;
         bool activated_ = false;

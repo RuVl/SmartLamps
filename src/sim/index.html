@@ -9,6 +9,7 @@
             color: #ddd;
             font: 14px system-ui;
             display: flex;
+            flex-wrap: wrap;
             gap: 28px;
             padding: 24px
         }
@@ -31,18 +32,71 @@
             border: 1px solid #333
         }
 
-        canvas {
+        #canvas {
             image-rendering: pixelated;
-            width: 480px;
-            height: 480px;
+            width: 320px;
+            height: 320px;
             background: #000;
             border: 1px solid #333
+        }
+
+        #view {
+            width: 420px;
+            height: 520px;
+            background: #0a0a0d;
+            border: 1px solid #333;
+            position: relative
+        }
+
+        #view canvas {
+            display: block
+        }
+
+        #view .note {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #777;
+            text-align: center;
+            padding: 20px
+        }
+
+        #reset {
+            position: absolute;
+            right: 8px;
+            top: 8px;
+            font: inherit;
+            padding: 4px 8px;
+            background: #222;
+            color: #ccc;
+            border: 1px solid #444;
+            border-radius: 4px;
+            cursor: pointer
         }
 
         label {
             display: block;
             margin: 10px 0 2px;
             color: #aaa
+        }
+
+        #controls {
+            flex: 0 0 300px
+        }
+
+        label.toggle {
+            display: block;
+            margin: 8px 0;
+            color: #ccc;
+            cursor: pointer
+        }
+
+        label.toggle small {
+            display: block;
+            margin-left: 22px;
+            color: #777
         }
 
         input[type=range] {
@@ -54,6 +108,15 @@
             padding: 4px
         }
 
+        h3 {
+            margin: 18px 0 6px;
+            font-size: 13px;
+            font-weight: normal;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: .06em
+        }
+
         #fps {
             color: #777;
             margin-top: 16px
@@ -61,22 +124,94 @@
     </style>
 </head>
 <body>
-<canvas id="canvas" width="16" height="16"></canvas>
 <div>
-    <label for="fx">Эффект</label>
-    <select id="fx"></select>
-
-    <label for="br">Яркость <span id="bv"></span>%</label>
-    <input id="br" type="range" min="0" max="100">
-
-    <div id="params"></div>
+    <canvas id="canvas" width="16" height="16"></canvas>
     <div id="fps"></div>
 </div>
-<script>
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
-    const img = ctx.createImageData(16, 16);
+<div id="view">
+    <div class="note" id="note">Загружаю 3D-вид…</div>
+    <button id="reset" hidden>Сбросить вид</button>
+</div>
+<div id="controls">
+    <label for="fx">Эффект</label>
+    <select id="fx"></select>
+    <label for="br">Яркость <span id="bv"></span>%</label>
+    <input id="br" type="range" min="0" max="100">
+    <div id="params"></div>
 
+    <h3>Как на ленте</h3>
+    <label class="toggle"><input type="checkbox" id="tSrgb" checked> sRGB для монитора
+        <small>лента светит линейно, экран ждёт sRGB</small></label>
+    <label class="toggle"><input type="checkbox" id="tLed" checked> Цветопередача WS2812B
+        <small>приблизительно, по хроматичности кристаллов</small></label>
+    <label class="toggle"><input type="checkbox" id="tLimit" checked> Лимит тока 3 А
+        <small>как на плате; белый кадр тускнеет</small></label>
+    <label class="toggle"><input type="checkbox" id="tDiffuser" checked> Рассеиватель
+        <small>только в 3D</small></label>
+</div>
+
+<script>
+    // ---------------------------------------------------------------- display --
+    // The lamp hands us what the strip would receive: linear light, 8 bit per
+    // channel. Two optional transforms make a monitor show roughly what the
+    // eye sees on the strip; the same bytes feed the 2D canvas and the 3D texture.
+
+    // LED RGB -> sRGB matrix from typical WS2812B chromaticities (R 620 nm,
+    // G 525 nm, B 470 nm) with the strip's full white taken as D65. The LED
+    // primaries are more saturated than sRGB's, so pure colours clip - that is
+    // real: a WS2812B red is redder than any monitor can show.
+    const ledToSrgb = (() => {
+        const prim = [[0.69, 0.31], [0.17, 0.72], [0.14, 0.06]];
+        const white = [0.3127, 0.3290];
+        const xyz = ([x, y]) => [x / y, 1, (1 - x - y) / y];
+        const inv3 = (m) => {
+            const [a, b, c, d, e, f, g, h, i] = m.flat();
+            const A = e * i - f * h, B = -(d * i - f * g), C = d * h - e * g;
+            const det = a * A + b * B + c * C;
+            return [[A, -(b * i - c * h), b * f - c * e],
+                [B, a * i - c * g, -(a * f - c * d)],
+                [C, -(a * h - b * g), a * e - b * d]].map(r => r.map(v => v / det));
+        };
+        const mulMV = (m, v) => m.map(r => r[0] * v[0] + r[1] * v[1] + r[2] * v[2]);
+        const mulMM = (a, b) => a.map(r => [0, 1, 2].map(j => r[0] * b[0][j] + r[1] * b[1][j] + r[2] * b[2][j]));
+        // P: XYZ of each primary as columns; S scales them so R=G=B=1 is the white point.
+        const cols = prim.map(xyz);
+        const P = [0, 1, 2].map(i => cols.map(c => c[i]));
+        const S = mulMV(inv3(P), xyz(white));
+        const ledToXyz = P.map(r => r.map((v, j) => v * S[j]));
+        const xyzToSrgb = [[3.2406, -1.5372, -0.4986], [-0.9689, 1.8758, 0.0415], [0.0557, -0.2040, 1.0570]];
+        return mulMM(xyzToSrgb, ledToXyz);
+    })();
+
+    const settings = {srgb: true, led: true, diffuser: true};
+    const enc = new Uint8Array(256); // linear -> sRGB, precomputed
+    for (let i = 0; i < 256; i++) {
+        const c = i / 255;
+        enc[i] = Math.round(255 * (c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055));
+    }
+
+    function toDisplay(r, g, b, out, o) {
+        if (settings.led) {
+            const m = ledToSrgb;
+            const R = m[0][0] * r + m[0][1] * g + m[0][2] * b;
+            const G = m[1][0] * r + m[1][1] * g + m[1][2] * b;
+            const B = m[2][0] * r + m[2][1] * g + m[2][2] * b;
+            r = Math.min(255, Math.max(0, Math.round(R)));
+            g = Math.min(255, Math.max(0, Math.round(G)));
+            b = Math.min(255, Math.max(0, Math.round(B)));
+        }
+        if (settings.srgb) {
+            r = enc[r];
+            g = enc[g];
+            b = enc[b];
+        }
+        out[o] = r;
+        out[o + 1] = g;
+        out[o + 2] = b;
+        out[o + 3] = 255;
+    }
+
+    // -------------------------------------------------------------- controls --
     const query = (url, body) => fetch(url, {method: 'POST', body: body});
 
     async function load() {
@@ -100,6 +235,8 @@
             bv.textContent = br.value;
             query('/api/brightness', br.value)
         };
+
+        document.getElementById('tLimit').checked = state.limit > 0;
 
         const params = document.getElementById('params');
         params.innerHTML = '';
@@ -148,25 +285,143 @@
         }
     }
 
+    document.getElementById('tSrgb').onchange = e => settings.srgb = e.target.checked;
+    document.getElementById('tLed').onchange = e => settings.led = e.target.checked;
+    document.getElementById('tDiffuser').onchange = e => settings.diffuser = e.target.checked;
+    document.getElementById('tLimit').onchange = e => query('/api/limit', e.target.checked ? 3000 : 0);
+
+    load();
+
+    // ----------------------------------------------------------------- frames --
+    const ctx = document.getElementById('canvas').getContext('2d');
+    const img = ctx.createImageData(16, 16);
+    // Matrix order, row 0 at the bottom - what the 3D texture wants as is.
+    const texels = new Uint8Array(16 * 16 * 4);
+    let onFrame = null; // set by the 3D view once it is up
+
     let n = 0, t = performance.now();
     new EventSource('/events').onmessage = e => {
         const h = e.data;
-        // Pixels arrive in matrix order, bottom row first; the canvas has its
-        // origin at the top, so rows are flipped and nothing else.
         for (let i = 0; i < 256; i++) {
+            const r = parseInt(h.substr(i * 6, 2), 16);
+            const g = parseInt(h.substr(i * 6 + 2, 2), 16);
+            const b = parseInt(h.substr(i * 6 + 4, 2), 16);
+            toDisplay(r, g, b, texels, i * 4);
+            // The canvas has its origin at the top, so rows are flipped and nothing else.
             const y = 15 - (i >> 4), x = i & 15, o = (y * 16 + x) * 4;
-            img.data[o] = parseInt(h.substr(i * 6, 2), 16);
-            img.data[o + 1] = parseInt(h.substr(i * 6 + 2, 2), 16);
-            img.data[o + 2] = parseInt(h.substr(i * 6 + 4, 2), 16);
-            img.data[o + 3] = 255
+            img.data[o] = texels[i * 4];
+            img.data[o + 1] = texels[i * 4 + 1];
+            img.data[o + 2] = texels[i * 4 + 2];
+            img.data[o + 3] = 255;
         }
         ctx.putImageData(img, 0, 0);
+        if (onFrame) onFrame();
         if (++n % 60 === 0) {
             const now = performance.now();
-            fps.textContent = Math.round(60000 / (now - t)) + ' к/с';
-            t = now
+            document.getElementById('fps').textContent = Math.round(60000 / (now - t)) + ' к/с';
+            t = now;
         }
     };
-    load();
+</script>
+
+<!-- ------------------------------------------------------------------- 3D -- -->
+<script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+</script>
+<script type="module">
+    // The lamp body: the 16x16 matrix bent into a tube, 10 mm pixel pitch, so
+    // the circumference is 160 mm and the height 160 mm. Columns run around
+    // the tube, rows up it, the seam (x = 0 | x = 15) at the back. Everything
+    // is in millimetres.
+    const view = document.getElementById('view');
+    const note = document.getElementById('note');
+    let THREE, OrbitControls;
+    try {
+        THREE = await import('three');
+        ({OrbitControls} = await import('three/addons/controls/OrbitControls.js'));
+    } catch (e) {
+        note.textContent = '3D-вид недоступен: не загрузился three.js (нужен интернет). 2D-вид слева работает.';
+        console.warn('three.js', e);
+    }
+    if (THREE) {
+        note.remove();
+        const W = view.clientWidth, H = view.clientHeight;
+        const renderer = new THREE.WebGLRenderer({antialias: true});
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(W, H);
+        renderer.setClearColor(0x0a0a0d);
+        view.prepend(renderer.domElement);
+
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(35, W / H, 1, 2000);
+        const home = {pos: new THREE.Vector3(0, 90, 330), target: new THREE.Vector3(0, 80, 0)};
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        const resetView = () => {
+            camera.position.copy(home.pos);
+            controls.target.copy(home.target);
+            controls.update();
+        };
+        resetView();
+        const reset = document.getElementById('reset');
+        reset.hidden = false;
+        reset.onclick = resetView;
+
+        const radius = 16 * 10 / (2 * Math.PI);
+        const height = 160;
+
+        // Two textures over the same bytes: crisp pixels for the bare matrix,
+        // interpolated for the frosted shade in front of it.
+        const makeTexture = (filter) => {
+            const tex = new THREE.DataTexture(texels, 16, 16, THREE.RGBAFormat);
+            tex.colorSpace = THREE.SRGBColorSpace; // the bytes are already display-encoded
+            tex.magFilter = filter;
+            tex.minFilter = filter;
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.ClampToEdgeWrapping;
+            tex.needsUpdate = true;
+            return tex;
+        };
+        const sharp = makeTexture(THREE.NearestFilter);
+        const soft = makeTexture(THREE.LinearFilter);
+
+        const tube = (r, tex, opacity) => {
+            const geo = new THREE.CylinderGeometry(r, r, height, 64, 1, true);
+            const mat = new THREE.MeshBasicMaterial({map: tex, transparent: opacity < 1, opacity});
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.y = height / 2;
+            mesh.rotation.y = Math.PI; // seam to the back
+            return mesh;
+        };
+        const matrix = tube(radius, sharp, 1);
+        const shade = tube(radius * 1.12, soft, 0.9);
+        scene.add(matrix, shade);
+
+        // Base and cap, so the tube reads as a lamp and not a floating texture.
+        const dark = new THREE.MeshBasicMaterial({color: 0x1c1b20});
+        const base = new THREE.Mesh(new THREE.CylinderGeometry(radius * 1.3, radius * 1.4, 14, 64), dark);
+        base.position.y = -7;
+        const cap = new THREE.Mesh(new THREE.CylinderGeometry(radius * 1.15, radius * 1.15, 6, 64), dark);
+        cap.position.y = height + 3;
+        scene.add(base, cap);
+
+        onFrame = () => {
+            sharp.needsUpdate = true;
+            soft.needsUpdate = true;
+        };
+
+        const frame = () => {
+            shade.visible = settings.diffuser;
+            controls.update();
+            renderer.render(scene, camera);
+            requestAnimationFrame(frame);
+        };
+        frame();
+    }
 </script>
 </body>

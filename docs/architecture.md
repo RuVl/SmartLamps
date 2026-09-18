@@ -15,7 +15,7 @@ src/
   effects/     по файлу на эффект
   net/         WiFi, Mqtt, WebUi, Ota
   audio/       (этап 6+) I2S, FFT, wake word — только ESP32-S3
-  sim/         симулятор: та же Lamp на хосте, кадр в браузер по SSE
+  sim/         симулятор: та же Lamp на хосте, кадр в браузер по SSE, 2D и 3D-вид
 test/test_core/  тесты ядра на хосте
 ```
 

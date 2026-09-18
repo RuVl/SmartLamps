@@ -84,6 +84,7 @@ std::string HttpServer::stateJson() const
     app::Lamp& lamp = app::lamp();
     doc["effect"] = lamp.effectName();
     doc["brightness"] = lamp.brightness();
+    doc["limit"] = lamp.currentLimit();
 
     JsonArray params = doc["params"].to<JsonArray>();
     for (core::Param* p = lamp.params(); p != nullptr; p = p->next())
@@ -147,6 +148,13 @@ void HttpServer::handleRequest(int fd, const std::string& request)
     {
         const int v = atoi(body.c_str());
         lamp.setBrightness(uint8_t(v < 0 ? 0 : (v > 100 ? 100 : v)));
+        reply(fd, "204 No Content", "text/plain", "");
+    }
+    else if (post && path == "/api/limit")
+    {
+        // Milliamps; 0 switches the limiter off.
+        const int v = atoi(body.c_str());
+        lamp.setCurrentLimit(uint16_t(v < 0 ? 0 : (v > 65535 ? 65535 : v)));
         reply(fd, "204 No Content", "text/plain", "");
     }
     else if (post && path == "/api/param")
