@@ -24,7 +24,11 @@ namespace net
     constexpr size_t kIdBrightness = "ui_brightness"_h;
     constexpr size_t kIdEffect = "ui_effect"_h;
     constexpr size_t kIdWifiLed = "ui_wifi_led"_h;
+    constexpr size_t kIdWifiState = "ui_wifi_state"_h;
+    constexpr size_t kIdWifiLog = "ui_wifi_log"_h;
     constexpr size_t kIdMqttLed = "ui_mqtt_led"_h;
+    constexpr size_t kIdMqttState = "ui_mqtt_state"_h;
+    constexpr size_t kIdMqttLog = "ui_mqtt_log"_h;
     constexpr size_t kIdInfo = "ui_info"_h;
     constexpr size_t kIdMem = "ui_mem"_h;
     constexpr size_t kIdLog = "ui_log"_h;
