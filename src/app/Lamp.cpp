@@ -83,7 +83,7 @@ namespace app
         }
 
         // Effects draw at full range; the supply limit is applied here, once, to the finished frame.
-        brightness = core::limitBrightness(pixels_, kPixelCount, brightness, LED_CURRENT_LIMIT_MA);
+        brightness = core::limitBrightness(pixels_, kPixelCount, brightness, currentLimitMa_);
         hal::ledDriver().show(brightness);
 
         ++fpsCounter_;
