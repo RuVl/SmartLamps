@@ -20,8 +20,11 @@ namespace hal
                 btn_.init();
                 // Library defaults are 50 / 500 / 600 ms. A single click is only
                 // reported once the click window closes (it could still become a
-                // double), so the window is what the user feels as lag. The pad
-                // debounces in hardware, so the software debounce is nearly free.
+                // double), so the window is what the user feels as lag: 200 ms is
+                // the shortest that still lets a relaxed double tap through. The
+                // library stores timeouts in 16 ms steps, so these land on 192
+                // and 288. The pad debounces in hardware, so the software
+                // debounce is nearly free.
                 btn_.setDebTimeout(kDebounceMs);
                 btn_.setClickTimeout(kClickWindowMs);
                 btn_.setHoldTimeout(kHoldStartMs);
@@ -31,28 +34,18 @@ namespace hal
             {
                 btn_.tick();
 
-                if (btn_.hold(1) && !holding_)
+                // hold() with no argument: hold(n) means "held after n clicks"
+                // and never fires for a plain press-and-hold.
+                if (btn_.hold() && !holding_)
                 {
                     holding_ = true;
                     return Gesture::HoldStart;
                 }
-                if (btn_.holding())
-                {
-                    // Five seconds of holding means power, not brightness. The
-                    // brightness ramp stops as soon as that threshold is crossed.
-                    if (!longFired_ && btn_.pressFor() >= kLongHoldMs)
-                    {
-                        longFired_ = true;
-                        return Gesture::LongHold;
-                    }
-                    return longFired_ ? Gesture::None : Gesture::HoldTick;
-                }
+                if (btn_.holding()) return Gesture::HoldTick;
                 if (holding_ && btn_.release())
                 {
                     holding_ = false;
-                    const bool wasLong = longFired_;
-                    longFired_ = false;
-                    return wasLong ? Gesture::None : Gesture::HoldEnd;
+                    return Gesture::HoldEnd;
                 }
 
                 if (btn_.hasClicks(3)) return Gesture::TripleClick;
@@ -62,14 +55,12 @@ namespace hal
             }
 
         private:
-            static constexpr uint16_t kLongHoldMs = 5000;
             static constexpr uint8_t kDebounceMs = 20;
-            static constexpr uint16_t kClickWindowMs = 250;
-            static constexpr uint16_t kHoldStartMs = 350;
+            static constexpr uint16_t kClickWindowMs = 200;
+            static constexpr uint16_t kHoldStartMs = 300;
 
             ButtonT<BUTTON_PIN> btn_{INPUT_PULLUP, HIGH};
             bool holding_ = false;
-            bool longFired_ = false;
         };
     }
 

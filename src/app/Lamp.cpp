@@ -277,11 +277,13 @@ namespace app
     {
         switch (g)
         {
-        case hal::Gesture::Click: nextEffect();
+        // The most frequent action gets the simplest gesture; the previous
+        // effect is a panel/MQTT affair.
+        case hal::Gesture::Click: togglePower();
             break;
-        case hal::Gesture::DoubleClick: prevEffect();
+        case hal::Gesture::DoubleClick: nextEffect();
             break;
-        case hal::Gesture::TripleClick: break; // ping - lands with the pairing phase
+        case hal::Gesture::TripleClick: break; // ping - lands with the pairing phase (docs/mqtt.md)
         case hal::Gesture::HoldStart:
             // Each hold sweeps the opposite way from the previous one, so
             // dimming never means going all the way up first.
@@ -299,8 +301,6 @@ namespace app
                 setBrightness(uint8_t(next));
                 break;
             }
-        case hal::Gesture::LongHold: togglePower();
-            break;
         case hal::Gesture::HoldEnd: hal::storage().flush();
             break;
         default: break;
