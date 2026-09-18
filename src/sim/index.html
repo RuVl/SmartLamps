@@ -151,6 +151,8 @@
     let n = 0, t = performance.now();
     new EventSource('/events').onmessage = e => {
         const h = e.data;
+        // Pixels arrive in matrix order, bottom row first; the canvas has its
+        // origin at the top, so rows are flipped and nothing else.
         for (let i = 0; i < 256; i++) {
             const y = 15 - (i >> 4), x = i & 15, o = (y * 16 + x) * 4;
             img.data[o] = parseInt(h.substr(i * 6, 2), 16);

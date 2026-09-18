@@ -21,25 +21,18 @@ namespace hal
 
             bool busy() const override { return false; }
 
-            static void snapshot(uint8_t* out)
+            static void snapshot(uint8_t* out, const uint16_t* indexMap)
             {
                 constexpr uint16_t kPixels = MATRIX_WIDTH * MATRIX_HEIGHT;
-                uint16_t n = count_ < kPixels ? count_ : kPixels;
-                uint16_t i = 0;
-                if (pixels_ != nullptr)
+                for (uint16_t i = 0; i < kPixels; ++i)
                 {
-                    for (; i < n; ++i)
-                    {
-                        out[i * 3 + 0] = scale8(pixels_[i].r, brightness_);
-                        out[i * 3 + 1] = scale8(pixels_[i].g, brightness_);
-                        out[i * 3 + 2] = scale8(pixels_[i].b, brightness_);
-                    }
-                }
-                for (; i < kPixels; ++i)
-                {
-                    out[i * 3 + 0] = 0;
-                    out[i * 3 + 1] = 0;
-                    out[i * 3 + 2] = 0;
+                    // i walks the matrix; the map says where that cell sits on the strip.
+                    const uint16_t s = indexMap[i];
+                    const bool have = pixels_ != nullptr && s < count_;
+                    const CRGB c = have ? pixels_[s] : CRGB::Black;
+                    out[i * 3 + 0] = scale8(c.r, brightness_);
+                    out[i * 3 + 1] = scale8(c.g, brightness_);
+                    out[i * 3 + 2] = scale8(c.b, brightness_);
                 }
             }
 
@@ -56,5 +49,5 @@ namespace hal
         return instance;
     }
 
-    void simSnapshot(uint8_t* out) { SimDriver::snapshot(out); }
+    void simSnapshot(uint8_t* out, const uint16_t* indexMap) { SimDriver::snapshot(out, indexMap); }
 }
