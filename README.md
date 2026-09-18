@@ -29,7 +29,7 @@ pio device monitor -b 115200
 | [Как написать эффект](docs/writing-effects.md) | разбор эталонного `Fire.cpp` |
 | [Архитектура](docs/architecture.md) | слои, конвейер кадра, что где выполняется |
 | [Железо](docs/hardware.md) | схема, питание, конденсаторы, распиновка |
-| [MQTT](docs/mqtt.md) | протокол, маячок, Home Assistant |
+| [MQTT](docs/mqtt.md) | протокол, маячок, Home Assistant, `scripts/mqtt-server.sh` |
 | [Вторая лампа на ESP8266](docs/esp8266.md) | что меняется и чего там нет |
 | [Словарь](CONTEXT.md) | термины проекта |
 | [Решения](docs/adr/) | почему Arduino, почему арена, почему аппаратный вывод |
