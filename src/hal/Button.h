@@ -12,13 +12,12 @@ namespace hal
     enum class Gesture : uint8_t
     {
         None,
-        Click, // next effect
-        DoubleClick, // previous effect
-        TripleClick, // ping the paired lamp
+        Click, // power on/off
+        DoubleClick, // next effect
+        TripleClick, // ping the paired lamp (reserved, see docs/mqtt.md)
         HoldStart, // begin brightness adjustment
         HoldTick, // continue adjusting while held
         HoldEnd,
-        LongHold, // 5 s: toggle the lamp on/off
     };
 
     class Button
@@ -48,8 +47,6 @@ namespace hal
         case Gesture::HoldTick: return "hold";
 
         case Gesture::HoldEnd: return "hold-end";
-
-        case Gesture::LongHold: return "long-hold";
 
         default: return "none";
         }
