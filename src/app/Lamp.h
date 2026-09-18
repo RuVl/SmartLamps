@@ -63,6 +63,10 @@ namespace app
 
         [[nodiscard]] uint16_t fps() const { return fps_; }
 
+        // The strip index of every (x, y), row by row from the bottom-left -
+        // for whoever needs to read the pixel buffer back in matrix order.
+        [[nodiscard]] const uint16_t* indexMap() const { return indexMap_; }
+
     private:
         enum class Transition : uint8_t { None, FadingOut, FadingIn };
 
