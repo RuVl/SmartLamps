@@ -139,7 +139,11 @@ namespace net::web
             if (b.Input(kWifiSsid, "Сеть (только 2,4 ГГц)")) trimVal(kWifiSsid);
             if (b.Pass(kWifiPass, "Пароль")) trimVal(kWifiPass);
             b.LED(kIdWifiLed, "Подключено", wifi::connected());
+            b.Label(kIdWifiState, "Состояние", wifi::status());
             if (b.Button("Переподключить")) g_pending = Pending::WifiReconnect;
+            // The same journal as in "Система", here so the answer to "why not"
+            // is on the page where the credentials are typed.
+            b.Log(kIdWifiLog, log(), "Журнал");
         }
 
         void buildMqttMenu(sets::Builder& b)
@@ -150,7 +154,9 @@ namespace net::web
             if (b.Input(kMqttUser, "Пользователь")) trimVal(kMqttUser);
             if (b.Pass(kMqttPass, "Пароль")) trimVal(kMqttPass);
             b.LED(kIdMqttLed, "Подключено", mqtt::connected());
+            b.Label(kIdMqttState, "Состояние", mqtt::status());
             if (b.Button("Переподключить")) g_pending = Pending::MqttReconnect;
+            b.Log(kIdMqttLog, log(), "Журнал");
         }
 
         void buildSystemMenu(sets::Builder& b)
@@ -252,7 +258,18 @@ namespace net::web
         const uint32_t now = millis();
         if (now - last < kLogPushMs || !pushSlot()) return false;
         last = now;
-        settings.updater().update(kIdLog, log());
+        // One packet for every copy of the journal plus the status lines: the
+        // Log widget takes plain text, and Logger::_changed() would only let
+        // the first of three update(id, Logger&) calls through.
+        const String text = log().toString();
+        settings.updater()
+            .update(kIdLog, text)
+            .update(kIdWifiLog, text)
+            .update(kIdMqttLog, text)
+            .update(kIdWifiState, wifi::status())
+            .update(kIdMqttState, mqtt::status())
+            .update(kIdWifiLed, wifi::connected())
+            .update(kIdMqttLed, mqtt::connected());
         return true;
     }
 }

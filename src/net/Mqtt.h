@@ -1,6 +1,6 @@
 #pragma once
 
-#include <stdint.h>
+#include <Arduino.h>
 
 namespace net::mqtt
 {
@@ -13,6 +13,9 @@ namespace net::mqtt
     bool connected();
 
     bool configured();
+
+    // One line for the panel: host when connected, otherwise the last reason.
+    String status();
 
     // Publishes the retained JSON state. Called whenever the lamp changed.
     void publishState();
