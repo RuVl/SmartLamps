@@ -18,7 +18,8 @@ namespace
             // below is a function of t, so the picture only depends on it.
             t_ += uint32_t(dtMs) * uint32_t(speed) / 50;
 
-            blur2d(f, uint8_t(40 + (int(blur) * 150) / 100));
+            // The demo dims its 64..100 through dim8_raw, i.e. it really blurs by 16..40.
+            blur2d(f, uint8_t(8 + int(blur) / 2));
 
             const uint8_t w = f.width();
             const uint8_t h = f.height();

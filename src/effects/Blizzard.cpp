@@ -21,7 +21,7 @@ namespace
         {
             // The tail is whatever the last frames left behind: the longer it
             // should be, the less each frame fades.
-            f.fade(uint8_t(140 - int(tail)));
+            f.fade(uint8_t(100 - (int(tail) * 90) / 100));
 
             gustMs_ = uint16_t(gustMs_ + dtMs);
             if (gustMs_ >= 700)
