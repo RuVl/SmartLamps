@@ -96,6 +96,9 @@ std::string HttpServer::stateJson() const
         o["min"] = p->min();
         o["max"] = p->max();
         o["value"] = p->get();
+        static const char* const kinds[] = {"slider", "hue", "switch", "select"};
+        o["kind"] = kinds[uint8_t(p->kind())];
+        if (p->options() != nullptr) o["options"] = p->options();
     }
 
     std::string out;

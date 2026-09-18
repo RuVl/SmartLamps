@@ -3,10 +3,11 @@
 // Every widget binds to a database key - the lamp's own state, the effect
 // parameters, WiFi and MQTT alike. Settings then keeps open panels in sync
 // through its own rate-limited update channel, and the code only reacts when
-// a widget reports a change. There are no unsolicited state pushes from here:
-// on the ESP8266 a burst of WebSocket sends from the loop races the TCP ack
-// path and crashes in AsyncWebSocketClient::_onAck (seen on hardware -
-// use-after-free, Exception 28 in sys context).
+// a widget reports a change. The few unsolicited pushes that do originate here
+// (the log, a rebuild after an effect change) share one throttle: on the
+// ESP8266 a burst of WebSocket sends from the loop races the TCP ack path and
+// crashes in AsyncWebSocketClient::_onAck (seen on hardware - use-after-free,
+// Exception 28 in sys context).
 //
 // The parameter sliders are generated from the active effect's Param list, so
 // a new effect appears in the panel with no UI code at all.
@@ -36,6 +37,8 @@ namespace net::web
         // previous firmware settled on after crashes at higher rates.
         constexpr uint16_t kSliderThrottleMs = 250;
         constexpr uint32_t kLogPushMs = 1000;
+        // Minimum gap between any two pushes we start from loop().
+        constexpr uint32_t kPushGapMs = 250;
 
         SettingsAsyncWS settings("SmartLamp", &hal::database());
         String g_effectOptions; // "Огонь;Радуга;…", built once from the registry
@@ -57,11 +60,44 @@ namespace net::web
         // decides whether the panel, MQTT and the strip fit together.
         uint32_t g_minFreeHeap = UINT32_MAX;
 
+        uint32_t g_lastPushMs = 0;
+        bool g_reloadPending = false;
+
+        // Claims the right to send one unsolicited WebSocket message now.
+        bool pushSlot()
+        {
+            const uint32_t now = millis();
+            if (now - g_lastPushMs < kPushGapMs) return false;
+            g_lastPushMs = now;
+            return true;
+        }
+
         bool trimVal(size_t key)
         {
             String s = hal::database().get(key).toString();
             s.trim();
             return hal::database().GyverDB::update(key, s);
+        }
+
+        // One widget per Param::Kind. Returns true when the panel changed the value.
+        bool paramWidget(sets::Builder& b, size_t id, const core::Param& p)
+        {
+            switch (p.kind())
+            {
+            case core::Param::Kind::Hue:
+                {
+                    // The slider is tinted with the current hue so the user sees
+                    // what they are picking. Settings cannot recolour a widget
+                    // live, so the tint follows only on the next panel build.
+                    const CRGB c = CHSV(uint8_t(p.get()), 255, 255);
+                    const uint32_t rgb = (uint32_t(c.r) << 16) | (uint32_t(c.g) << 8) | c.b;
+                    return b.Slider(id, p.label(), 0, 255, 1, "", nullptr, rgb);
+                }
+            case core::Param::Kind::Switch: return b.Switch(id, p.label());
+            case core::Param::Kind::Select: return b.Select(id, p.label(), p.options());
+            case core::Param::Kind::Slider: break;
+            }
+            return b.Slider(id, p.label(), p.min(), p.max(), 1);
         }
 
         void buildLampMenu(sets::Builder& b)
@@ -76,11 +112,11 @@ namespace net::web
             if (b.Slider(app::keys::kBrightness, "Яркость", 0, 100, 1, "%"))
                 lamp.setBrightness(uint8_t(db.get(app::keys::kBrightness).toInt()));
 
+            // No b.reload() here: the new effect is built only after the 300 ms
+            // fade-out, and a rebuild now would still list the old parameters.
+            // tick() reloads the panel once Lamp reports the activation.
             if (b.Select(app::keys::kEffect, "Эффект", g_effectOptions))
-            {
                 lamp.selectEffect(uint16_t(db.get(app::keys::kEffect).toInt()));
-                b.reload(); // the parameter sliders below belong to the new effect
-            }
 
             // Everything below comes from the effect's Param declarations. The keys
             // are the same ones Lamp reads the parameters back from at boot.
@@ -90,7 +126,8 @@ namespace net::web
                 for (core::Param* p = lamp.params(); p != nullptr; p = p->next())
                 {
                     const size_t id = hal::paramKey(lamp.effectName(), p->key());
-                    if (b.Slider(id, p->label(), p->min(), p->max(), 1))
+                    // A Switch lands in the database as a bool; toInt() reads it as 0/1.
+                    if (paramWidget(b, id, *p))
                         lamp.setParam(p->key(), int16_t(db.get(id).toInt()));
                 }
             }
@@ -188,6 +225,13 @@ namespace net::web
 
         settings.tick();
 
+        if (app::lamp().consumeActivated()) g_reloadPending = true;
+        if (g_reloadPending && pushSlot())
+        {
+            g_reloadPending = false;
+            settings.reload(); // sends only to a focused panel, else defers to its next request
+        }
+
         const Pending pending = g_pending;
         g_pending = Pending::None;
         if (pending == Pending::None) return;
@@ -206,7 +250,7 @@ namespace net::web
     {
         static uint32_t last = 0;
         const uint32_t now = millis();
-        if (now - last < kLogPushMs) return false;
+        if (now - last < kLogPushMs || !pushSlot()) return false;
         last = now;
         settings.updater().update(kIdLog, log());
         return true;
