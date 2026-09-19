@@ -54,6 +54,9 @@ void setup()
 #endif
     Serial.begin(SERIAL_BAUD);
 #ifdef LAMP_BOARD_ESP8266
+    // Why the board (re)started. After a crash this is the only trace left
+    // when the exception dump itself was not captured.
+    Serial.println(String(F("reset: ")) + ESP.getResetInfo());
     // The data line's electrical setup, so a log alone tells which build is on the board.
     Serial.printf("led: pin %d inverted=%d 4step=%d lead=%d\n", LED_DATA_PIN,
                   kLedInverted, kLed4Step, kLedLeadPixels);

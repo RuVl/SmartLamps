@@ -63,6 +63,21 @@ namespace net::web
         uint32_t g_lastPushMs = 0;
         bool g_reloadPending = false;
 
+#ifdef LAMP_MEMLOG
+        uint32_t g_buildSpLow = UINT32_MAX;
+
+        // The build runs on the SDK's sys stack; sampling a1 here is the only way
+        // to learn how much of it a page costs.
+        void sampleStack()
+        {
+            uint32_t sp;
+            asm volatile("mov %0, a1" : "=r"(sp));
+            if (sp < g_buildSpLow) g_buildSpLow = sp;
+        }
+#else
+        inline void sampleStack() {}
+#endif
+
         // Claims the right to send one unsolicited WebSocket message now.
         bool pushSlot()
         {
@@ -130,6 +145,7 @@ namespace net::web
                     if (paramWidget(b, id, *p))
                         lamp.setParam(p->key(), int16_t(db.get(id).toInt()));
                 }
+                sampleStack();
             }
         }
 
@@ -141,9 +157,6 @@ namespace net::web
             b.LED(kIdWifiLed, "Подключено", wifi::connected());
             b.Label(kIdWifiState, "Состояние", wifi::status());
             if (b.Button("Переподключить")) g_pending = Pending::WifiReconnect;
-            // The same journal as in "Система", here so the answer to "why not"
-            // is on the page where the credentials are typed.
-            b.Log(kIdWifiLog, log(), "Журнал");
         }
 
         void buildMqttMenu(sets::Builder& b)
@@ -156,7 +169,6 @@ namespace net::web
             b.LED(kIdMqttLed, "Подключено", mqtt::connected());
             b.Label(kIdMqttState, "Состояние", mqtt::status());
             if (b.Button("Переподключить")) g_pending = Pending::MqttReconnect;
-            b.Log(kIdMqttLog, log(), "Журнал");
         }
 
         void buildSystemMenu(sets::Builder& b)
@@ -192,7 +204,12 @@ namespace net::web
             b.Label(kIdMem, "Память, байт", mem);
 
             if (b.Button("Применить имя и перезагрузить")) g_pending = Pending::Restart;
+            // The one and only copy of the journal on the page. Every b.Log() is
+            // another kilobyte in the page and in every pushLog() packet, on a
+            // heap where the page build is already the largest transient - see
+            // docs/memory-esp8266.md.
             b.Log(kIdLog, log());
+            sampleStack();
         }
 
         void build(sets::Builder& b)
@@ -261,18 +278,21 @@ namespace net::web
         const uint32_t now = millis();
         if (now - last < kLogPushMs || !pushSlot()) return false;
         last = now;
-        // One packet for every copy of the journal plus the status lines: the
-        // Log widget takes plain text, and Logger::_changed() would only let
-        // the first of three update(id, Logger&) calls through.
-        const String text = log().toString();
+        // One packet for the journal and the status lines.
+        // The Logger overload streams the journal straight into the packet: no
+        // 1 KB String copy on the heap for every push.
         settings.updater()
-            .update(kIdLog, text)
-            .update(kIdWifiLog, text)
-            .update(kIdMqttLog, text)
+            .update(kIdLog, log())
             .update(kIdWifiState, wifi::status())
             .update(kIdMqttState, mqtt::status())
             .update(kIdWifiLed, wifi::connected())
             .update(kIdMqttLed, mqtt::connected());
         return true;
     }
+
+    bool focused() { return settings.focused(); }
+
+#ifdef LAMP_MEMLOG
+    uint32_t buildStackLow() { return g_buildSpLow; }
+#endif
 }
