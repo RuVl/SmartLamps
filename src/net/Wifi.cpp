@@ -2,6 +2,11 @@
 
 #include <WiFiConnector.h>
 
+#ifndef ESP32
+extern "C" {
+#include <user_interface.h>
+}
+#endif
 
 #include "Config.h"
 #include "Log.h"
@@ -28,6 +33,20 @@ namespace net::wifi
         uint8_t g_lastLoggedReason = 0;
         String g_lastError; // what the panel shows next to the LED
         bool g_connecting = false;
+        bool g_apClosing = false;
+
+        // WiFi.mode() waits for the SDK to finish the switch: esp_delay() in
+        // the loop() context, 100 ms at the least and up to a second, and no
+        // frame is rendered meanwhile. The SDK call alone returns at once, and
+        // nothing here needs the new mode in force before the next tick.
+        void switchMode(WiFiMode_t m)
+        {
+#ifdef ESP32
+            WiFi.mode(m);
+#else
+            wifi_set_opmode_current(uint8_t(m));
+#endif
+        }
 
         const __FlashStringHelper* reasonText(uint8_t code)
         {
@@ -105,8 +124,10 @@ namespace net::wifi
         WiFiConnector.setPass(kApPass);
         WiFiConnector.setTimeout(kConnectTimeoutS);
         // The AP goes away once STA is up and comes back if STA is lost, so the
-        // panel is always reachable one way or the other.
-        WiFiConnector.closeAP(true);
+        // panel is always reachable one way or the other. Closed from tick(),
+        // not by WiFiConnector: its closeAP() goes through WiFi.mode() and its
+        // wait, right when the lamp is showing an effect.
+        WiFiConnector.closeAP(false);
         installReasonHook();
 
         reconnect();
@@ -156,12 +177,18 @@ namespace net::wifi
         {
             g_lostSince = 0;
             g_lastLoggedReason = 0; // the next drop deserves a line again
+            if (accessPointUp() && !g_apClosing)
+            {
+                g_apClosing = true;
+                switchMode(WIFI_STA);
+            }
             return;
         }
+        g_apClosing = false;
         if (g_lostSince == 0) g_lostSince = millis();
         if (!accessPointUp() && millis() - g_lostSince >= kReopenApAfterMs)
         {
-            WiFi.mode(WIFI_AP_STA);
+            switchMode(WIFI_AP_STA);
             WiFi.softAP(lampName().c_str(), kApPass);
             logWarn(F("WiFi: сеть потеряна, точка доступа открыта снова"));
         }

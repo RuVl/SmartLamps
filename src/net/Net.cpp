@@ -18,6 +18,24 @@ namespace net
         sets::Logger g_log(kLogBytes);
         bool g_logDirty = false;
 
+        // A frame is 16 ms; anything that holds loop() much longer freezes the
+        // matrix. The line lands right after whatever was logged last, which
+        // usually names the culprit. One line per ten seconds is enough.
+        constexpr uint32_t kStallMs = 100;
+        constexpr uint32_t kStallLogGapMs = 10000;
+        uint32_t g_lastLoopMs = 0;
+        uint32_t g_lastStallLogMs = 0;
+
+        void watchStall(uint32_t nowMs)
+        {
+            const uint32_t gap = nowMs - g_lastLoopMs;
+            const bool first = g_lastLoopMs == 0;
+            g_lastLoopMs = nowMs;
+            if (first || gap < kStallMs || nowMs - g_lastStallLogMs < kStallLogGapMs) return;
+            g_lastStallLogMs = nowMs;
+            logWarn(String(F("цикл стоял ")) + gap + F(" мс"));
+        }
+
         void append(const String& prefix, const String& s)
         {
             g_log.print(prefix);
@@ -96,6 +114,7 @@ namespace net
 
     void tick(uint32_t nowMs)
     {
+        watchStall(nowMs);
         wifi::tick();
         web::tick();
         mqtt::tick(nowMs);

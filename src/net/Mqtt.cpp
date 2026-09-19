@@ -215,13 +215,18 @@ namespace net::mqtt
         db.init(kMqttUser, "");
         db.init(kMqttPass, "");
 
+        g_host = db.get(kMqttHost).toString();
+        g_host.trim();
+
         client.onConnect(onConnect);
         client.onDisconnect(onDisconnect);
         client.onMessage(onMessage);
         client.setKeepAlive(kKeepAliveS);
     }
 
-    bool configured() { return !hal::database().get(kMqttHost).toString().isEmpty(); }
+    // From the cached host, not the database: this is asked every loop for
+    // the status pixel, and a String out of GyverDB is a heap allocation.
+    bool configured() { return !g_host.isEmpty(); }
 
     void reconnect()
     {
