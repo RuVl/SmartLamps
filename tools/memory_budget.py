@@ -24,7 +24,7 @@ DRAM_END = 0x3FFFC000  # end of the 80 KB user DRAM; the sys stack lives above
 
 # --- measured on lamp B, 2026-09-19, env d1_mini_mem, WS client + MQTT connected ---
 # Heap taken at idle by everything that is not static: WiFi + lwIP (AP+STA,
-# DHCP server, mDNS), the open WebSocket, the MQTT session, LittleFS, GyverDB,
+# DHCP server), the open WebSocket, the MQTT session, LittleFS, GyverDB,
 # NeoPixelBus buffers and the Logger. Measured as heap0 - ESP.getFreeHeap() at
 # idle with the panel open and the broker connected, log full.
 IDLE_TAKEN = 19_600

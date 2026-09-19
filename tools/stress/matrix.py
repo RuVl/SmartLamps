@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""Stress matrix against the lamp's Settings panel (WS) and MQTT.
+"""Stress matrix against the lamp's Settings panel (WS + the static page) and MQTT.
 uv run --quiet --with websockets --with paho-mqtt matrix.py <case> [<case>...]
-Env: LAMP, NAME, BROKER, PASS, OUT (csv prefix)."""
+Cases: load sliders fastsliders fastfx power twin mqttburst both logspam spamlong soak
+       static browser pair notest testonly konf one mem
+Env: LAMP, NAME, BROKER, PASS, OUT (csv prefix), NOMQTT=1, PAIR, REPS, EFFECT."""
 import asyncio, os, re, struct, sys, time, threading
 import websockets
 import paho.mqtt.client as mqtt
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from lampkeys import su, fnv, key_id, APP, EFF, PARAMS, STATIC
 
 LAMP = os.environ.get("LAMP", "192.168.31.220")
 NAME = os.environ.get("NAME", "Lamp8266")
@@ -12,32 +17,7 @@ BROKER = os.environ.get("BROKER", "192.168.31.21")
 PASS = os.environ.get("PASS", "")
 OUT = os.environ.get("OUT", "out/matrix")
 
-def su(s):
-    h = 0
-    for c in s.encode(): h = (h + (h << 5) + c) & 0xFFFFFFFF
-    return h
-def fnv(e, k):
-    h = 2166136261
-    for c in (e + "." + k).encode(): h = ((h ^ c) * 16777619) & 0xFFFFFFFF
-    return h
 AUTH = su(PASS) if PASS else 0
-APP = {"lamp": 0x6C616D70, "brgt": 0x62726774, "efcx": 0x65666378}
-EFF = ["Тест", "Конфетти", "Снегопад", "Радуга", "Пейнтбол", "Шум 3D", "Матрица", "Светлячки",
-       "Огонь", "Блуждающий кубик", "Смена цвета", "Метель"]
-PARAMS = {  # key -> (min, max); Switch/Select spammed as 0..n
- "Смена цвета": {"speed": (1,100), "saturation": (0,100)},
- "Огонь": {"speed": (1,100), "cooling": (10,100), "spark": (10,200), "hue": (0,60)},
- "Светлячки": {"speed": (1,100), "count": (1,12), "trace": (0,1)},
- "Матрица": {"speed": (1,100), "density": (1,100)},
- "Тест": {"pattern": (0,3)},
- "Пейнтбол": {"speed": (1,100), "blur": (1,100)},
- "Метель": {"speed": (1,100), "density": (1,100), "tail": (0,100)},
- "Шум 3D": {"speed": (1,100), "scale": (1,100), "palette": (0,3)},
- "Снегопад": {"speed": (1,100), "density": (1,100)},
- "Конфетти": {"speed": (1,100), "density": (1,30), "fade": (5,100)},
- "Радуга": {"speed": (1,100), "scale": (1,100), "dir": (0,1)},
- "Блуждающий кубик": {"speed": (1,100), "size": (1,5)},
-}
 MEM_RE = re.compile(r"свободно (\d+) · минимум (\d+) · блок (\d+)(?: · стек loop (\d+))?")
 
 os.makedirs(os.path.dirname(OUT) or ".", exist_ok=True)
@@ -75,8 +55,7 @@ class Panel:
     async def send(self, action, ident=0, value="", timeout=0.3):
         await self.ws.send(self.frame(action, ident, value)); return await self.drain(timeout)
     async def set(self, key, value, timeout=0.3):
-        ident = APP[key] if key in APP else (fnv(*key.split(".", 1)) if "." in key else su(key))
-        return await self.send("set", ident, str(value), timeout)
+        return await self.send("set", key_id(key), str(value), timeout)
     async def load(self, timeout=1.5):
         return await self.send("load", 0, f"{int(time.time()):x}", timeout)
     async def mem(self, case, step):
@@ -109,7 +88,7 @@ async def c_sliders(p, delay=0.25, steps=40, effects=EFF):
 
 async def c_fastfx(p):
     for d in (0.15, 0.06, 0.02):
-        for i in range(24): await p.set("efcx", i % 12, timeout=d)
+        for i in range(24): await p.set("efcx", i % len(EFF), timeout=d)
         await asyncio.sleep(1.0)
         await p.mem("fastfx", f"{int(d*1000)}ms")
         log("  state:", state["last"])
@@ -141,7 +120,7 @@ async def mqtt_soak(seconds, stop):
     t0 = time.time(); i = 0
     while time.time() - t0 < seconds and not stop.is_set():
         pub("brightness", 20 + (i * 13) % 80); i += 1
-        if i % 5 == 0: pub("effect", EFF[i % 12])
+        if i % 5 == 0: pub("effect", EFF[i % len(EFF)])
         await asyncio.sleep(1.0)
 
 async def c_both(p):
@@ -193,6 +172,51 @@ async def c_soak(p, minutes=30):
         for _ in range(25): await p.send("ping", 0, "", 2.0)
         await p.mem("soak", f"min{i+1}")
     stop.set(); await t
+
+async def fetch(path):
+    """One GET like a browser does it: a fresh connection, read to the end."""
+    r, w = await asyncio.wait_for(asyncio.open_connection(LAMP, 80), 5)
+    w.write(f"GET {path} HTTP/1.1\r\nHost: {LAMP}\r\nAccept-Encoding: gzip\r\nConnection: close\r\n\r\n".encode())
+    await w.drain()
+    body = await asyncio.wait_for(r.read(), 15)
+    w.close()
+    return len(body)
+
+async def open_panel():
+    """The four requests a browser fires when the panel is opened, in parallel -
+    the PROGMEM pages go out through AsyncWebServer in heap-allocated chunks,
+    which no WS command exercises."""
+    t0 = time.time()
+    sizes = await asyncio.gather(*(fetch(x) for x in STATIC), return_exceptions=True)
+    bad = [x for x in sizes if isinstance(x, Exception)]
+    return time.time() - t0, sum(x for x in sizes if not isinstance(x, Exception)), len(bad)
+
+async def c_static(p, n=10):
+    for i in range(n):
+        dt, total, bad = await open_panel()
+        log(f"static #{i+1}: {total} bytes in {dt:.2f}s, failed {bad}")
+        if bad: await p.mem("static", f"fail{i+1}")
+    await p.mem("static", "after")
+
+async def c_browser(p, rounds=3):
+    """Page opens interleaved with slider work, plus a page open every 20 s in the
+    background while the sliders run - the owner reloading the panel on the phone."""
+    stop = asyncio.Event()
+    async def reloader():
+        while not stop.is_set():
+            try: await asyncio.wait_for(stop.wait(), 20)
+            except asyncio.TimeoutError:
+                dt, total, bad = await open_panel()
+                log(f"browser/reload: {total} bytes in {dt:.2f}s, failed {bad}")
+    t = asyncio.create_task(reloader())
+    try:
+        for r in range(rounds):
+            await c_static(p, 3)
+            await c_sliders(p, effects=EFF[r * 4:(r + 1) * 4])
+            await p.mem("browser", f"round{r+1}")
+    finally:
+        stop.set(); await t
+    await c_static(p, 3)
 
 async def c_mem(p): await p.mem("mem", "probe")
 

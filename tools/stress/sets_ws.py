@@ -16,29 +16,11 @@ Commands:
 Frame = <H pid><I auth><I action><I id> + payload text. Hashes = su::hash (h = h*33 + c, 32-bit),
 effect params = FNV-1a("Effect.param") as in src/hal/Storage.h.
 """
-import asyncio, struct, sys, time
+import asyncio, os, struct, sys, time
 import websockets
 
-def su(s: str) -> int:
-    h = 0
-    for c in s.encode("utf-8"):
-        h = (h + (h << 5) + c) & 0xFFFFFFFF
-    return h
-
-def fnv(effect: str, key: str) -> int:
-    h = 2166136261
-    for c in (effect + "." + key).encode("utf-8"):
-        h = ((h ^ c) * 16777619) & 0xFFFFFFFF
-    return h
-
-APP = {"lamp": 0x6C616D70, "brgt": 0x62726774, "efcx": 0x65666378}
-
-def key_id(k: str) -> int:
-    if k in APP: return APP[k]
-    if "." in k:
-        e, p = k.split(".", 1)
-        return fnv(e, p)
-    return su(k)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from lampkeys import su, key_id, APP, EFF
 
 def frame(action: str, ident: int, value: str, auth: int, pid: int = 1) -> bytes:
     return struct.pack("<HIII", pid, auth, su(action), ident) + value.encode("utf-8")
@@ -99,7 +81,7 @@ async def main():
         elif cmd == "effects":
             n, d = int(args[0]), int(args[1]) / 1000
             for i in range(n):
-                await ws.send(frame("set", APP["efcx"], str(i % 12), auth)); await drain(d)
+                await ws.send(frame("set", APP["efcx"], str(i % len(EFF)), auth)); await drain(d)
         elif cmd == "twin":
             while True:
                 await ws.send(frame("ping", 0, "", auth)); await drain(2.0)
