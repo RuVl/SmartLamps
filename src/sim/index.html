@@ -33,11 +33,14 @@
         }
 
         #canvas {
-            image-rendering: pixelated;
             width: 320px;
             height: 320px;
             background: #000;
             border: 1px solid #333
+        }
+
+        #canvas.raw {
+            image-rendering: pixelated
         }
 
         #view {
@@ -93,10 +96,13 @@
             cursor: pointer
         }
 
-        label.toggle small {
+        label small {
             display: block;
-            margin-left: 22px;
             color: #777
+        }
+
+        label.toggle small {
+            margin-left: 22px
         }
 
         input[type=range] {
@@ -125,7 +131,7 @@
 </head>
 <body>
 <div>
-    <canvas id="canvas" width="16" height="16"></canvas>
+    <canvas id="canvas"></canvas>
     <div id="fps"></div>
 </div>
 <div id="view">
@@ -142,69 +148,95 @@
     <h3>Как на ленте</h3>
     <label class="toggle"><input type="checkbox" id="tSrgb" checked> sRGB для монитора
         <small>лента светит линейно, экран ждёт sRGB</small></label>
+    <label for="exp">Экспозиция <span id="ev"></span>×
+        <small>лампа много ярче экрана; 1 — экран как лента, больше — как глаз в тёмной комнате</small></label>
+    <input id="exp" type="range" min="1" max="16" value="6">
     <label class="toggle"><input type="checkbox" id="tLed" checked> Цветопередача WS2812B
         <small>приблизительно, по хроматичности кристаллов</small></label>
     <label class="toggle"><input type="checkbox" id="tLimit" checked> Лимит тока 3 А
         <small>как на плате; белый кадр тускнеет</small></label>
-    <label class="toggle"><input type="checkbox" id="tDiffuser" checked> Рассеиватель
-        <small>только в 3D</small></label>
+    <label class="toggle"><input type="checkbox" id="tDiffuser" checked> Как глазом
+        <small>светодиоды и рассеиватель; выключить — голые пиксели</small></label>
+    <label class="toggle"><input type="checkbox" id="tShade" checked> Плафон
+        <small>только в 3D: матовый колпак поверх матрицы</small></label>
 </div>
 
 <script>
     // ---------------------------------------------------------------- display --
     // The lamp hands us what the strip would receive: linear light, 8 bit per
-    // channel. Two optional transforms make a monitor show roughly what the
-    // eye sees on the strip; the same bytes feed the 2D canvas and the 3D texture.
+    // channel. Optional transforms make a monitor show roughly what the eye
+    // sees on the strip; the same picture is the 2D view and the 3D texture.
 
     // LED RGB -> sRGB matrix from typical WS2812B chromaticities (R 620 nm,
-    // G 525 nm, B 470 nm) with the strip's full white taken as D65. The LED
-    // primaries are more saturated than sRGB's, so pure colours clip - that is
-    // real: a WS2812B red is redder than any monitor can show.
+    // G 525 nm, B 470 nm) and luminous intensities within the datasheet's
+    // ranges (R 550-700, G 1100-1400, B 200-400 mcd), picked so the mix lands
+    // on the daylight locus. The LED primaries are more saturated than sRGB's,
+    // so pure colours clip - that is real: a WS2812B red is redder than any
+    // monitor can show. The strip's own white is not D65 either: with that
+    // much blue it sits near 12000 K, the cold blue-white the lamp photographs
+    // as. The matrix is scaled so full white just fits the monitor's blue.
     const ledToSrgb = (() => {
         const prim = [[0.69, 0.31], [0.17, 0.72], [0.14, 0.06]];
-        const white = [0.3127, 0.3290];
+        const mcd = [550, 1400, 250];
         const xyz = ([x, y]) => [x / y, 1, (1 - x - y) / y];
-        const inv3 = (m) => {
-            const [a, b, c, d, e, f, g, h, i] = m.flat();
-            const A = e * i - f * h, B = -(d * i - f * g), C = d * h - e * g;
-            const det = a * A + b * B + c * C;
-            return [[A, -(b * i - c * h), b * f - c * e],
-                [B, a * i - c * g, -(a * f - c * d)],
-                [C, -(a * h - b * g), a * e - b * d]].map(r => r.map(v => v / det));
-        };
         const mulMV = (m, v) => m.map(r => r[0] * v[0] + r[1] * v[1] + r[2] * v[2]);
         const mulMM = (a, b) => a.map(r => [0, 1, 2].map(j => r[0] * b[0][j] + r[1] * b[1][j] + r[2] * b[2][j]));
-        // P: XYZ of each primary as columns; S scales them so R=G=B=1 is the white point.
-        const cols = prim.map(xyz);
-        const P = [0, 1, 2].map(i => cols.map(c => c[i]));
-        const S = mulMV(inv3(P), xyz(white));
-        const ledToXyz = P.map(r => r.map((v, j) => v * S[j]));
+        // XYZ of each primary as columns, weighted by its share of the white's luminance.
+        const total = mcd[0] + mcd[1] + mcd[2];
+        const cols = prim.map((p, i) => xyz(p).map(v => v * mcd[i] / total));
+        const ledToXyz = [0, 1, 2].map(i => cols.map(c => c[i]));
         const xyzToSrgb = [[3.2406, -1.5372, -0.4986], [-0.9689, 1.8758, 0.0415], [0.0557, -0.2040, 1.0570]];
-        return mulMM(xyzToSrgb, ledToXyz);
+        const m = mulMM(xyzToSrgb, ledToXyz);
+        const peak = Math.max(...mulMV(m, [1, 1, 1]));
+        return m.map(r => r.map(v => v / peak));
     })();
 
-    const settings = {srgb: true, led: true, diffuser: true};
-    const enc = new Uint8Array(256); // linear -> sRGB, precomputed
-    for (let i = 0; i < 256; i++) {
-        const c = i / 255;
-        enc[i] = Math.round(255 * (c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055));
-    }
+    // The lowest PWM steps come out bluer still: a value of 1 gives roughly
+    // half the red and nine tenths of the green that the step size predicts,
+    // as if each channel lost a fixed slice of its first pulse (measured on
+    // lamp B against the value 8). Matters only at 1-2 % brightness, where
+    // that is all the strip ever shows.
+    const dead = [0.45, 0.1, 0];
+
+    const settings = {srgb: true, led: true, diffuser: true, shade: true, exposure: 6};
+
+    // The lamp is far brighter than a monitor: its full white is some twenty
+    // times the screen's, so at the top of the range it can only clip, while
+    // 2 % - a clearly lit night light in a dark room - would be a few display
+    // steps above black if the screen's white stood for the strip's. The eye
+    // adapts; the exposure control does the same here, with a soft knee so
+    // the bright end saturates instead of cutting.
+    const tone = (v) => {
+        const k = settings.exposure, e = k * v;
+        return e * (1 + e / (k * k)) / (1 + e);
+    };
+    // Linear 0..255 -> sRGB 0..255. Kept in floating point up to here: the
+    // strip's lowest steps are fractions of a display step, and rounding
+    // them away first would black out 1 % brightness.
+    const enc = (v) => {
+        const c = Math.min(1, tone(Math.max(0, v / 255)));
+        return 255 * (c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055);
+    };
 
     function toDisplay(r, g, b, out, o) {
         if (settings.led) {
+            if (r) r -= dead[0];
+            if (g) g -= dead[1];
+            if (b) b -= dead[2];
             const m = ledToSrgb;
             const R = m[0][0] * r + m[0][1] * g + m[0][2] * b;
             const G = m[1][0] * r + m[1][1] * g + m[1][2] * b;
             const B = m[2][0] * r + m[2][1] * g + m[2][2] * b;
-            r = Math.min(255, Math.max(0, Math.round(R)));
-            g = Math.min(255, Math.max(0, Math.round(G)));
-            b = Math.min(255, Math.max(0, Math.round(B)));
+            r = R;
+            g = G;
+            b = B;
         }
         if (settings.srgb) {
-            r = enc[r];
-            g = enc[g];
-            b = enc[b];
+            r = enc(r);
+            g = enc(g);
+            b = enc(b);
         }
+        // Uint8ClampedArray rounds and clips for us.
         out[o] = r;
         out[o + 1] = g;
         out[o + 2] = b;
@@ -213,6 +245,22 @@
 
     // -------------------------------------------------------------- controls --
     const query = (url, body) => fetch(url, {method: 'POST', body: body});
+
+    // A slider fires on every pixel of a drag; only the latest value matters,
+    // and one request per frame is plenty (the lamp's own panel settles for
+    // four a second).
+    const throttled = (url) => {
+        let pending = null, timer = 0;
+        return (body) => {
+            pending = body;
+            if (timer) return;
+            timer = setTimeout(() => {
+                timer = 0;
+                query(url, pending);
+            }, 30);
+        };
+    };
+    const setBrightness = throttled('/api/brightness');
 
     async function load() {
         const state = await (await fetch('/api/state')).json();
@@ -234,7 +282,7 @@
         bv.textContent = state.brightness;
         br.oninput = () => {
             bv.textContent = br.value;
-            query('/api/brightness', br.value)
+            setBrightness(br.value);
         };
 
         document.getElementById('tLimit').checked = state.limit > 0;
@@ -251,7 +299,8 @@
 
             // Same four kinds as the lamp's panel (core::Param::Kind).
             let i;
-            const send = (v) => query('/api/param', param.key + '=' + v);
+            const post = throttled('/api/param');
+            const send = (v) => post(param.key + '=' + v);
             if (param.kind === 'select') {
                 i = document.createElement('select');
                 param.options.split(';').forEach((name, idx) => {
@@ -287,19 +336,26 @@
     }
 
     document.getElementById('tSrgb').onchange = e => settings.srgb = e.target.checked;
+    {
+        const exp = document.getElementById('exp'), ev = document.getElementById('ev');
+        ev.textContent = exp.value;
+        exp.oninput = () => settings.exposure = +(ev.textContent = exp.value);
+    }
     document.getElementById('tLed').onchange = e => settings.led = e.target.checked;
     document.getElementById('tDiffuser').onchange = e => settings.diffuser = e.target.checked;
+    document.getElementById('tShade').onchange = e => settings.shade = e.target.checked;
     document.getElementById('tLimit').onchange = e => query('/api/limit', e.target.checked ? 3000 : 0);
 
     load();
 
     // ----------------------------------------------------------------- frames --
-    const ctx = document.getElementById('canvas').getContext('2d');
-    const img = ctx.createImageData(16, 16);
-    // Matrix order, row 0 at the bottom - what the 3D texture wants as is.
-    const texels = new Uint8Array(16 * 16 * 4);
+    // Matrix order, row 0 at the bottom, as the lamp sends it. The canvas has
+    // its origin at the top, so rows are flipped and nothing else.
+    const img = new ImageData(16, 16);
     let onFrame = null; // set by the 3D view once it is up
 
+    // Frames per wall-clock second, not per N frames: SSE data arrives in
+    // bursts when the tab is busy, and a per-N figure swings wildly.
     let n = 0, t = performance.now();
     const events = new EventSource('/events');
     events.addEventListener('state', load);
@@ -309,22 +365,190 @@
             const r = parseInt(h.substr(i * 6, 2), 16);
             const g = parseInt(h.substr(i * 6 + 2, 2), 16);
             const b = parseInt(h.substr(i * 6 + 4, 2), 16);
-            toDisplay(r, g, b, texels, i * 4);
-            // The canvas has its origin at the top, so rows are flipped and nothing else.
-            const y = 15 - (i >> 4), x = i & 15, o = (y * 16 + x) * 4;
-            img.data[o] = texels[i * 4];
-            img.data[o + 1] = texels[i * 4 + 1];
-            img.data[o + 2] = texels[i * 4 + 2];
-            img.data[o + 3] = 255;
+            const y = 15 - (i >> 4), x = i & 15;
+            toDisplay(r, g, b, img.data, (y * 16 + x) * 4);
         }
-        ctx.putImageData(img, 0, 0);
+        renderLamp();
         if (onFrame) onFrame();
-        if (++n % 60 === 0) {
-            const now = performance.now();
-            document.getElementById('fps').textContent = Math.round(60000 / (now - t)) + ' к/с';
+        ++n;
+        const now = performance.now();
+        if (now - t >= 1000) {
+            document.getElementById('fps').textContent = Math.round(n * 1000 / (now - t)) + ' к/с';
+            n = 0;
             t = now;
         }
     };
+
+    // ------------------------------------------------------------ the lamp --
+    // What the eye sees is not a grid of coloured squares. Each 5050 package is
+    // a bright spot about half the pitch wide, and the diffuser sheet in front
+    // of it smears the light over the neighbours: a lit LED reads as a hot
+    // core inside a soft halo, and a solid colour as dots on a glowing field.
+    // Tuned against photographs of lamp B; the same picture is the 2D view
+    // and the texture wrapped around the 3D tube.
+    const PITCH = 32; // render pixels per LED
+    const SIZE = 16 * PITCH;
+    const canvas = document.getElementById('canvas');
+    canvas.width = canvas.height = SIZE;
+    const ctx = canvas.getContext('2d');
+
+    // The raw frame, and the same frame tiled three times across so that
+    // halos and bloom wrap around the seam the way they do on the tube.
+    const raw = document.createElement('canvas');
+    raw.width = raw.height = 16;
+    const rawCtx = raw.getContext('2d');
+    const tiled = document.createElement('canvas');
+    tiled.width = 48;
+    tiled.height = 16;
+    const tiledCtx = tiled.getContext('2d');
+
+    const CORE = 0.5 * PITCH; // the package: 5 mm on a 10 mm pitch, seen through the sheet
+    const INSET = (PITCH - CORE) / 2;
+
+    // Light leaves the board only through the packages. The aperture mask is
+    // static: a soft disc per LED, which the frame is cut out through, so a
+    // solid colour still reads as dots on a field.
+    const stencil = (columns, pitch) => {
+        const c = document.createElement('canvas');
+        c.width = columns * pitch;
+        c.height = 16 * pitch;
+        const a = c.getContext('2d');
+        const core = CORE / PITCH * pitch;
+        for (let y = 0; y < 16; y++)
+            for (let x = 0; x < columns; x++) {
+                const cx = x * pitch + pitch / 2, cy = y * pitch + pitch / 2;
+                const g = a.createRadialGradient(cx, cy, 0, cx, cy, core * 0.7);
+                g.addColorStop(0, 'rgba(255,255,255,1)');
+                g.addColorStop(0.7, 'rgba(255,255,255,1)');
+                g.addColorStop(1, 'rgba(255,255,255,0)');
+                a.fillStyle = g;
+                a.fillRect(cx - core, cy - core, 2 * core, 2 * core);
+            }
+        return c;
+    };
+    const layer = (w, h) => {
+        const c = document.createElement('canvas');
+        c.width = w;
+        c.height = h;
+        return c;
+    };
+
+    // Blurs cost by the pixel, so everything soft is made at a quarter of the
+    // scale and enlarged: a halo has no detail that would show the difference.
+    // Only the packages themselves are cut out at full scale.
+    const LO = PITCH / 4;
+    const loW = 48 * LO, loH = 16 * LO;
+    const aperture = stencil(16, PITCH);
+    const apertureLo = stencil(48, LO);
+    const lit = layer(SIZE, SIZE);
+    const litLo = layer(loW, loH);
+    const bloomLo = layer(loW, loH);
+    const haloLo = layer(loW, loH);
+    const hotLo = layer(loW, loH);
+    const glowLo = layer(loW, loH);
+
+    // The frame cut out through the aperture mask, at the given scale.
+    function cutOut(target, src, mask) {
+        const c = target.getContext('2d');
+        c.globalCompositeOperation = 'source-over';
+        c.imageSmoothingEnabled = false;
+        c.drawImage(src, 0, 0, target.width, target.height);
+        c.globalCompositeOperation = 'destination-in';
+        c.drawImage(mask, 0, 0);
+    }
+
+    function soften(target, src, filter) {
+        const c = target.getContext('2d');
+        c.clearRect(0, 0, target.width, target.height);
+        c.filter = filter;
+        c.imageSmoothingEnabled = true;
+        c.drawImage(src, 0, 0, target.width, target.height);
+        c.filter = 'none';
+    }
+
+    function renderLamp() {
+        rawCtx.putImageData(img, 0, 0);
+        for (let k = 0; k < 3; k++) tiledCtx.drawImage(raw, k * 16, 0);
+        canvas.classList.toggle('raw', !settings.diffuser);
+        if (!settings.diffuser) {
+            ctx.globalAlpha = 1;
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(raw, 0, 0, SIZE, SIZE);
+            return;
+        }
+
+        // Dark board with the unlit packages just visible, as through the sheet.
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = '#08080a';
+        ctx.fillRect(0, 0, SIZE, SIZE);
+        ctx.fillStyle = '#0f0f12';
+        for (let y = 0; y < 16; y++)
+            for (let x = 0; x < 16; x++)
+                ctx.fillRect(x * PITCH + INSET, y * PITCH + INSET, CORE, CORE);
+
+        // Light adds, in three scales: a wide bloom that fills the gaps on a
+        // solid colour, a halo around each package, and the package itself -
+        // hotter than anything the sheet passes on, washing towards white at
+        // the top of the range the way a bare LED does to the eye.
+        cutOut(lit, raw, aperture);
+        cutOut(litLo, tiled, apertureLo);
+        soften(bloomLo, tiled, `blur(${LO * 0.9}px)`);
+        soften(haloLo, litLo, `blur(${LO * 0.4}px)`);
+        soften(hotLo, litLo, `blur(${LO * 0.15}px) saturate(60%) brightness(1.2)`);
+
+        // Summed while still small; the full-size canvas takes two draws.
+        const g = glowLo.getContext('2d');
+        g.globalCompositeOperation = 'source-over';
+        g.clearRect(0, 0, loW, loH);
+        g.globalAlpha = 0.3;
+        g.drawImage(bloomLo, 0, 0);
+        g.globalCompositeOperation = 'lighter';
+        g.globalAlpha = 0.6;
+        g.drawImage(haloLo, 0, 0);
+        g.globalAlpha = 0.45;
+        g.drawImage(hotLo, 0, 0);
+
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.imageSmoothingEnabled = true;
+        ctx.globalAlpha = 1;
+        ctx.drawImage(glowLo, -SIZE, 0, 3 * SIZE, SIZE);
+        ctx.globalAlpha = 0.8;
+        ctx.drawImage(lit, 0, 0);
+    }
+
+    // The shade: a frosted plastic cylinder some 10 mm out from the matrix.
+    // What reaches its surface is the frame smeared by about a pitch, and the
+    // plastic itself scatters more, so it reads as a soft column of dots in a
+    // faint glow. Kept small: it is only ever seen blurred.
+    const shade = layer(16 * LO, 16 * LO);
+    const shadeLo = layer(loW, loH);
+
+    function renderShade() {
+        soften(shadeLo, tiled, `blur(${LO * 1.1}px)`);
+        const c = shade.getContext('2d');
+        c.globalCompositeOperation = 'source-over';
+        c.globalAlpha = 1;
+        c.fillStyle = '#1c1b20'; // the plastic itself, in a dim room
+        c.fillRect(0, 0, shade.width, shade.height);
+        c.globalCompositeOperation = 'lighter';
+        c.globalAlpha = 0.4;
+        c.drawImage(shadeLo, -shade.width, 0, 3 * shade.width, shade.height);
+    }
+
+    // Mean colour of the frame in linear light - what the lamp throws on the table.
+    function spill() {
+        let r = 0, g = 0, b = 0;
+        const d = img.data;
+        for (let i = 0; i < 256; i++) {
+            r += d[i * 4];
+            g += d[i * 4 + 1];
+            b += d[i * 4 + 2];
+        }
+        const lin = (v) => Math.pow(v / 256 / 255, 2.2);
+        return [lin(r), lin(g), lin(b)];
+    }
 </script>
 
 <!-- ------------------------------------------------------------------- 3D -- -->
@@ -362,7 +586,7 @@
 
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(35, W / H, 1, 2000);
-        const home = {pos: new THREE.Vector3(0, 90, 330), target: new THREE.Vector3(0, 80, 0)};
+        const home = {pos: new THREE.Vector3(0, 170, 440), target: new THREE.Vector3(0, 85, 0)};
         const controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         const resetView = () => {
@@ -377,49 +601,82 @@
 
         const radius = 16 * 10 / (2 * Math.PI);
         const height = 160;
+        // The shade, measured off the lamp: wider than the matrix, a little
+        // taller, closed at the top, standing straight on the table.
+        const shadeRadius = radius * 1.4;
+        const shadeHeight = 175;
 
-        // Two textures over the same bytes: crisp pixels for the bare matrix,
-        // interpolated for the frosted shade in front of it.
-        const makeTexture = (filter) => {
-            const tex = new THREE.DataTexture(texels, 16, 16, THREE.RGBAFormat);
-            tex.colorSpace = THREE.SRGBColorSpace; // the bytes are already display-encoded
-            tex.magFilter = filter;
-            tex.minFilter = filter;
-            tex.wrapS = THREE.RepeatWrapping;
-            tex.wrapT = THREE.ClampToEdgeWrapping;
-            tex.needsUpdate = true;
-            return tex;
+        const texture = (source) => {
+            // flipY puts the canvas top at the top of the tube; the halo
+            // already wraps across the seam.
+            const t = new THREE.CanvasTexture(source);
+            t.colorSpace = THREE.SRGBColorSpace; // the bytes are already display-encoded
+            t.wrapS = THREE.RepeatWrapping;
+            t.wrapT = THREE.ClampToEdgeWrapping;
+            t.magFilter = THREE.LinearFilter;
+            t.minFilter = THREE.LinearFilter;
+            t.generateMipmaps = false;
+            return t;
         };
-        const sharp = makeTexture(THREE.NearestFilter);
-        const soft = makeTexture(THREE.LinearFilter);
+        const face = texture(canvas);
+        const frost = texture(shade);
 
-        const tube = (r, tex, opacity) => {
-            const geo = new THREE.CylinderGeometry(r, r, height, 64, 1, true);
-            const mat = new THREE.MeshBasicMaterial({map: tex, transparent: opacity < 1, opacity});
-            const mesh = new THREE.Mesh(geo, mat);
-            mesh.position.y = height / 2;
+        const cylinder = (r, h, material) => {
+            const mesh = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 64, 1, true), material);
+            mesh.position.y = h / 2;
             mesh.rotation.y = Math.PI; // seam to the back
             return mesh;
         };
-        const matrix = tube(radius, sharp, 1);
-        const shade = tube(radius * 1.12, soft, 0.9);
-        scene.add(matrix, shade);
+        const tube = cylinder(radius, height, new THREE.MeshBasicMaterial({map: face, side: THREE.DoubleSide}));
+        // The plastic passes the matrix through softened and adds its own glow.
+        const cover = cylinder(shadeRadius, shadeHeight,
+            new THREE.MeshBasicMaterial({map: frost, transparent: true, opacity: 0.8}));
+        scene.add(tube, cover);
 
-        // Base and cap, so the tube reads as a lamp and not a floating texture.
-        const dark = new THREE.MeshBasicMaterial({color: 0x1c1b20});
-        const base = new THREE.Mesh(new THREE.CylinderGeometry(radius * 1.3, radius * 1.4, 14, 64), dark);
-        base.position.y = -7;
-        const cap = new THREE.Mesh(new THREE.CylinderGeometry(radius * 1.15, radius * 1.15, 6, 64), dark);
-        cap.position.y = height + 3;
-        scene.add(base, cap);
+        // The lid: the same plastic, lit from below by whatever the top rows
+        // show, with the dark plug in the middle.
+        const lidMaterial = new THREE.MeshBasicMaterial({color: 0x1c1b20, transparent: true, opacity: 0.95});
+        const lid = new THREE.Mesh(new THREE.CircleGeometry(shadeRadius, 64), lidMaterial);
+        lid.rotation.x = -Math.PI / 2;
+        lid.position.y = shadeHeight;
+        const plug = new THREE.Mesh(new THREE.CircleGeometry(shadeRadius * 0.3, 32),
+            new THREE.MeshBasicMaterial({color: 0x0c0c0e}));
+        plug.rotation.x = -Math.PI / 2;
+        plug.position.y = shadeHeight + 0.2;
+        scene.add(lid, plug);
+
+        // A table for the light to fall on.
+        const table = new THREE.Mesh(new THREE.PlaneGeometry(1200, 1200),
+            new THREE.MeshStandardMaterial({color: 0x4a4650, roughness: 1}));
+        table.rotation.x = -Math.PI / 2;
+        table.position.y = -0.5;
+        scene.add(table);
+
+        // Light from the lamp itself: a point light in the tube's centre, in the
+        // frame's mean colour, so the table glows with the effect.
+        const glow = new THREE.PointLight(0xffffff, 0, 0, 2);
+        glow.position.y = height / 2;
+        scene.add(glow, new THREE.AmbientLight(0xffffff, 0.15));
 
         onFrame = () => {
-            sharp.needsUpdate = true;
-            soft.needsUpdate = true;
+            face.needsUpdate = true;
+            if (settings.shade) {
+                renderShade();
+                frost.needsUpdate = true;
+            }
+            // Hue in the colour, amount in the intensity (candela over
+            // millimetres, hence the scale); a full white frame lights the
+            // table brightly without washing the tube out. The shade keeps
+            // most of it in.
+            const [r, g, b] = spill();
+            const peak = Math.max(r, g, b);
+            if (peak > 0) glow.color.setRGB(r / peak, g / peak, b / peak, THREE.LinearSRGBColorSpace);
+            glow.intensity = (settings.shade ? 12000 : 30000) * peak;
+            lidMaterial.color.setRGB(0.11 + 0.5 * r, 0.11 + 0.5 * g, 0.12 + 0.5 * b, THREE.LinearSRGBColorSpace);
         };
 
         const frame = () => {
-            shade.visible = settings.diffuser;
+            cover.visible = lid.visible = plug.visible = settings.shade;
             controls.update();
             renderer.render(scene, camera);
             requestAnimationFrame(frame);
