@@ -40,6 +40,14 @@ namespace core
         return nullptr;
     }
 
+    uint16_t Registry::indexOf(const EffectInfo* info)
+    {
+        uint16_t i = 0;
+        for (EffectInfo* e = listHead(); e != nullptr; e = e->next, ++i)
+            if (e == info) return i;
+        return 0;
+    }
+
     uint16_t Registry::count()
     {
         uint16_t n = 0;

@@ -11,17 +11,6 @@
 
 namespace app
 {
-    namespace
-    {
-        uint16_t indexOf(const core::EffectInfo* target)
-        {
-            uint16_t i = 0;
-            for (core::EffectInfo* e = core::Registry::head(); e != nullptr; e = e->next, ++i)
-                if (e == target) return i;
-            return 0;
-        }
-    }
-
     void Lamp::begin()
     {
         geometry_ = core::Geometry{
@@ -56,8 +45,7 @@ namespace app
         // for WiFi.
         activate(wantEffect_);
         litOn_ = wantOn_;
-        transition_ = Transition::FadingIn;
-        transitionMs_ = 0;
+        startTransition(Transition::FadingIn);
         changed_ = true;
     }
 
@@ -91,8 +79,15 @@ namespace app
             // A dark lamp still has to show that it is waiting for WiFi. A lit
             // one keeps its own brightness - the floor used to lift the whole
             // frame, so a lamp at 5 % ran at 20 % until the broker answered,
-            // then dropped - and the pixel is boosted instead.
-            if (!drawing) brightness = kStatusMinBrightness;
+            // then dropped - and the pixel is boosted instead. Zero covers the
+            // lamp switched off, switched on at 0 % and the last frame of a
+            // fade alike: nothing else is visible, so the frame is cleared and
+            // only the pixel shows.
+            if (brightness == 0)
+            {
+                frame.clear();
+                brightness = kStatusMinBrightness;
+            }
             drawStatus(frame, nowMs, brightness);
         }
 
@@ -152,29 +147,45 @@ namespace app
         if (wantOn != litOn_)
         {
             litOn_ = wantOn;
-            transition_ = wantOn ? Transition::FadingIn : Transition::FadingOut;
-            transitionMs_ = 0;
+            if (wantOn)
+            {
+                // Switched on with a change still pending: the matrix is dark
+                // or nearly so, and the fade-in starts from black anyway, so
+                // the new effect is built right here.
+                if (pending_ != nullptr)
+                {
+                    activate(pending_);
+                    pending_ = nullptr;
+                }
+                startTransition(Transition::FadingIn);
+            }
+            else if (transition_ != Transition::FadingOut)
+            {
+                // A fade-out already running (for an effect change) carries on;
+                // restarting it would flash the lamp back up first.
+                startTransition(Transition::FadingOut);
+            }
         }
 
         core::EffectInfo* wantEffect = wantEffect_.load(std::memory_order_relaxed);
-        if (wantEffect == nullptr || wantEffect == info_ || wantEffect == pending_) return;
+        if (wantEffect == nullptr) return;
+        if (wantEffect == info_)
+        {
+            pending_ = nullptr; // back to the current one: the change is off
+            return;
+        }
+        if (wantEffect == pending_) return;
 
         // A dark lamp changes effect silently; a lit one fades out first and
         // activate()s at the bottom of the fade. A second request during the
-        // fade-out just replaces pending_ - the fade is not restarted - and a
-        // switch-off during it keeps pending_: the fade ends in darkness with
-        // the new effect built, ready for the next switch-on.
+        // fade-out just replaces pending_ - the fade is not restarted.
         if (!litOn_ && transition_ == Transition::None)
         {
             activate(wantEffect);
             return;
         }
         pending_ = wantEffect;
-        if (transition_ != Transition::FadingOut)
-        {
-            transition_ = Transition::FadingOut;
-            transitionMs_ = 0;
-        }
+        if (transition_ != Transition::FadingOut) startTransition(Transition::FadingOut);
     }
 
     void Lamp::applyTransition(uint16_t dtMs, uint8_t& brightnessOut)
@@ -200,8 +211,7 @@ namespace app
                     activate(pending_);
                     pending_ = nullptr;
                 }
-                transition_ = litOn_ ? Transition::FadingIn : Transition::None;
-                transitionMs_ = 0;
+                startTransition(litOn_ ? Transition::FadingIn : Transition::None);
             }
         }
         else
@@ -215,11 +225,11 @@ namespace app
     {
         if (info == nullptr) return;
 
-        // effect_ is cleared first and published last, so the network side
-        // finds either the old list, the new one, or none - see Lamp.h.
-        core::Effect* old = effect_;
+        // Under the arena lock from the first byte to the last, so a walk of
+        // the Param list from the network side never overlaps the rebuild.
+        hal::Guard guard(lock_);
+        if (effect_ != nullptr) effect_->~Effect();
         effect_ = nullptr;
-        if (old != nullptr) old->~Effect();
 
         info_ = info;
         core::Effect* fresh = info->construct(arena_);
@@ -239,6 +249,7 @@ namespace app
 
     bool Lamp::setParam(const char* key, int16_t value)
     {
+        hal::Guard guard(lock_);
         if (effect_ == nullptr || info_ == nullptr) return false;
         for (core::Param* p = effect_->params(); p != nullptr; p = p->next())
         {
@@ -268,7 +279,7 @@ namespace app
     {
         core::EffectInfo* info = core::Registry::find(name);
         if (info == nullptr) return false;
-        selectEffect(indexOf(info));
+        selectEffect(core::Registry::indexOf(info));
         return true;
     }
 

@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <algorithm>
 
 #include <ArduinoJson.h>
 
@@ -83,23 +84,24 @@ std::string HttpServer::stateJson() const
 
     app::Lamp& lamp = app::lamp();
     doc["effect"] = lamp.effectName();
+    doc["on"] = lamp.isOn();
     doc["brightness"] = lamp.brightness();
     doc["limit"] = lamp.currentLimit();
 
     JsonArray params = doc["params"].to<JsonArray>();
-    for (core::Param* p = lamp.params(); p != nullptr; p = p->next())
+    lamp.forEachParam([&](core::Param& p)
     {
         JsonObject o = params.add<JsonObject>();
-        o["key"] = p->key();
-        o["id"] = p->key(); // the page addresses inputs by id
-        o["label"] = p->label();
-        o["min"] = p->min();
-        o["max"] = p->max();
-        o["value"] = p->get();
+        o["key"] = p.key();
+        o["id"] = p.key(); // the page addresses inputs by id
+        o["label"] = p.label();
+        o["min"] = p.min();
+        o["max"] = p.max();
+        o["value"] = p.get();
         static const char* const kinds[] = {"slider", "hue", "switch", "select"};
-        o["kind"] = kinds[uint8_t(p->kind())];
-        if (p->options() != nullptr) o["options"] = p->options();
-    }
+        o["kind"] = kinds[uint8_t(p.kind())];
+        if (p.options() != nullptr) o["options"] = p.options();
+    });
 
     std::string out;
     serializeJson(doc, out);
@@ -142,27 +144,32 @@ void HttpServer::handleRequest(int fd, const std::string& request)
     else if (post && path == "/api/effect")
     {
         if (!body.empty()) lamp.selectEffect(body.c_str());
-        reply(fd, "204 No Content", "text/plain", "");
+        noContent(fd);
+    }
+    else if (post && path == "/api/power")
+    {
+        lamp.setPower(atoi(body.c_str()) != 0);
+        noContent(fd);
     }
     else if (post && path == "/api/brightness")
     {
         const int v = atoi(body.c_str());
         lamp.setBrightness(uint8_t(v < 0 ? 0 : (v > 100 ? 100 : v)));
-        reply(fd, "204 No Content", "text/plain", "");
+        noContent(fd);
     }
     else if (post && path == "/api/limit")
     {
         // Milliamps; 0 switches the limiter off.
         const int v = atoi(body.c_str());
         lamp.setCurrentLimit(uint16_t(v < 0 ? 0 : (v > 65535 ? 65535 : v)));
-        reply(fd, "204 No Content", "text/plain", "");
+        noContent(fd);
     }
     else if (post && path == "/api/param")
     {
         const size_t eq = body.find('=');
         if (eq != std::string::npos)
             lamp.setParam(body.substr(0, eq).c_str(), int16_t(atoi(body.c_str() + eq + 1)));
-        reply(fd, "204 No Content", "text/plain", "");
+        noContent(fd);
     }
     else
     {
@@ -185,15 +192,30 @@ void HttpServer::serve()
         const int fd = accept(listener_, nullptr, nullptr);
         if (fd < 0) return;
 
+        // The head and the body may arrive in separate segments; read until
+        // Content-Length is satisfied (or the buffer is full).
         char buf[4096];
-        const ssize_t n = read(fd, buf, sizeof(buf) - 1);
-        if (n <= 0)
+        size_t got = 0;
+        size_t need = sizeof(buf) - 1;
+        while (got < need)
+        {
+            const ssize_t n = read(fd, buf + got, sizeof(buf) - 1 - got);
+            if (n <= 0) break;
+            got += size_t(n);
+            buf[got] = 0;
+            const char* headEnd = strstr(buf, "\r\n\r\n");
+            if (headEnd == nullptr) continue;
+            const char* cl = strcasestr(buf, "Content-Length:");
+            const size_t bodyLen = (cl != nullptr && cl < headEnd) ? size_t(atoi(cl + 15)) : 0;
+            need = std::min(sizeof(buf) - 1, size_t(headEnd + 4 - buf) + bodyLen);
+        }
+        if (got == 0)
         {
             ::close(fd);
             continue;
         }
-        buf[n] = 0;
-        handleRequest(fd, std::string(buf));
+        buf[got] = 0;
+        handleRequest(fd, std::string(buf, got));
     }
 }
 
