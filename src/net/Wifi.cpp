@@ -2,12 +2,18 @@
 
 #include <WiFiConnector.h>
 
+#ifndef ESP32
+extern "C" {
+#include <user_interface.h>
+}
+#endif
 
 #include "Config.h"
 #include "Log.h"
 #include "Mqtt.h"
 #include "Ota.h"
 #include "hal/Database.h"
+#include "hal/Mailbox.h"
 
 namespace net::wifi
 {
@@ -23,14 +29,24 @@ namespace net::wifi
 
         uint32_t g_lostSince = 0;
 
-        // The SDK reports why the station dropped through an event that runs
-        // in its own context - not a place to build Strings or touch the log.
-        // The handler only records the code; tick() turns it into a line.
-        volatile uint8_t g_reason = 0;
-        volatile bool g_reasonDirty = false; // volatile, not atomic: xtensa-lx106 has no __atomic_exchange_1
+        hal::Mailbox<uint8_t> g_reason;
         uint8_t g_lastLoggedReason = 0;
         String g_lastError; // what the panel shows next to the LED
         bool g_connecting = false;
+        bool g_apClosing = false;
+
+        // WiFi.mode() waits for the SDK to finish the switch: esp_delay() in
+        // the loop() context, 100 ms at the least and up to a second, and no
+        // frame is rendered meanwhile. The SDK call alone returns at once, and
+        // nothing here needs the new mode in force before the next tick.
+        void switchMode(WiFiMode_t m)
+        {
+#ifdef ESP32
+            WiFi.mode(m);
+#else
+            wifi_set_opmode_current(uint8_t(m));
+#endif
+        }
 
         const __FlashStringHelper* reasonText(uint8_t code)
         {
@@ -60,19 +76,12 @@ namespace net::wifi
 #ifdef ESP32
             WiFi.onEvent(
                 [](WiFiEvent_t, WiFiEventInfo_t info)
-                {
-                    g_reason = uint8_t(info.wifi_sta_disconnected.reason);
-                    g_reasonDirty = true;
-                },
+                { g_reason.set(uint8_t(info.wifi_sta_disconnected.reason)); },
                 ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
 #else
             // The handler object must outlive the registration, hence static.
             static WiFiEventHandler handler = WiFi.onStationModeDisconnected(
-                [](const WiFiEventStationModeDisconnected& e)
-                {
-                    g_reason = uint8_t(e.reason);
-                    g_reasonDirty = true;
-                });
+                [](const WiFiEventStationModeDisconnected& e) { g_reason.set(uint8_t(e.reason)); });
 #endif
         }
 
@@ -115,8 +124,10 @@ namespace net::wifi
         WiFiConnector.setPass(kApPass);
         WiFiConnector.setTimeout(kConnectTimeoutS);
         // The AP goes away once STA is up and comes back if STA is lost, so the
-        // panel is always reachable one way or the other.
-        WiFiConnector.closeAP(true);
+        // panel is always reachable one way or the other. Closed from tick(),
+        // not by WiFiConnector: its closeAP() goes through WiFi.mode() and its
+        // wait, right when the lamp is showing an effect.
+        WiFiConnector.closeAP(false);
         installReasonHook();
 
         reconnect();
@@ -147,10 +158,9 @@ namespace net::wifi
 
     void tick()
     {
-        if (g_reasonDirty)
+        uint8_t code = 0;
+        if (g_reason.take(code))
         {
-            g_reasonDirty = false;
-            const uint8_t code = g_reason;
             g_lastError = String(reasonText(code)) + F(" [") + code + ']';
             // The SDK retries on its own and repeats the same reason every few
             // seconds; one line per distinct reason is what the log needs.
@@ -167,12 +177,18 @@ namespace net::wifi
         {
             g_lostSince = 0;
             g_lastLoggedReason = 0; // the next drop deserves a line again
+            if (accessPointUp() && !g_apClosing)
+            {
+                g_apClosing = true;
+                switchMode(WIFI_STA);
+            }
             return;
         }
+        g_apClosing = false;
         if (g_lostSince == 0) g_lostSince = millis();
         if (!accessPointUp() && millis() - g_lostSince >= kReopenApAfterMs)
         {
-            WiFi.mode(WIFI_AP_STA);
+            switchMode(WIFI_AP_STA);
             WiFi.softAP(lampName().c_str(), kApPass);
             logWarn(F("WiFi: сеть потеряна, точка доступа открыта снова"));
         }

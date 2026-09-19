@@ -64,9 +64,28 @@ namespace hal
         };
     }
 
+#ifdef LAMP_BUTTON_DISABLED
+    // The pad on lamp B fires gestures on its own; see platformio.ini.
+    namespace
+    {
+        class NoButton final : public Button
+        {
+        public:
+            void begin() override {}
+            Gesture poll() override { return Gesture::None; }
+        };
+    }
+
+    Button& button()
+    {
+        static NoButton instance;
+        return instance;
+    }
+#else
     Button& button()
     {
         static TouchButton instance;
         return instance;
     }
+#endif
 }

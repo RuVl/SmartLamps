@@ -43,6 +43,7 @@ namespace net::ota
     {
         if (g_started) return;
         g_started = true;
+        ArduinoOTA.setPassword(LAMP_OTA_PASS);
         ArduinoOTA.begin();
         logInfo(F("OTA: слушаю"));
     }

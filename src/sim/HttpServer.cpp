@@ -46,7 +46,7 @@ bool HttpServer::begin(uint16_t port)
         close();
         return false;
     }
-    listen(listener_, 8);
+    listen(listener_, 64);
 
     printf("http://localhost:%u - %u effects\n", port, core::Registry::count());
     fflush(stdout);
@@ -174,21 +174,27 @@ void HttpServer::handleRequest(int fd, const std::string& request)
 void HttpServer::serve()
 {
     if (listener_ < 0) return;
-    pollfd p{listener_, POLLIN, 0};
-    if (poll(&p, 1, 0) <= 0) return;
-
-    const int fd = accept(listener_, nullptr, nullptr);
-    if (fd < 0) return;
-
-    char buf[4096];
-    const ssize_t n = read(fd, buf, sizeof(buf) - 1);
-    if (n <= 0)
+    // Everything queued, not one request per frame: a slider being dragged
+    // posts faster than the lamp renders, and served one per loop the queue
+    // grows and the picture trails the mouse by seconds.
+    for (;;)
     {
-        ::close(fd);
-        return;
+        pollfd p{listener_, POLLIN, 0};
+        if (poll(&p, 1, 0) <= 0) return;
+
+        const int fd = accept(listener_, nullptr, nullptr);
+        if (fd < 0) return;
+
+        char buf[4096];
+        const ssize_t n = read(fd, buf, sizeof(buf) - 1);
+        if (n <= 0)
+        {
+            ::close(fd);
+            continue;
+        }
+        buf[n] = 0;
+        handleRequest(fd, std::string(buf));
     }
-    buf[n] = 0;
-    handleRequest(fd, std::string(buf));
 }
 
 void HttpServer::broadcast()

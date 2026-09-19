@@ -5,6 +5,8 @@
 
 #include <ArduinoJson.h>
 #include <AsyncMqttClient.h>
+#include <atomic>
+#include <string.h>
 #ifdef ESP32
 #include <WiFi.h>
 #else
@@ -17,6 +19,7 @@
 #include "app/Lamp.h"
 #include "core/Registry.h"
 #include "hal/Database.h"
+#include "hal/Mailbox.h"
 
 namespace net::mqtt
 {
@@ -24,7 +27,6 @@ namespace net::mqtt
     {
         constexpr uint32_t kRetryMs = 5000;
         constexpr uint16_t kKeepAliveS = 15;
-        constexpr size_t kMaxPayload = 256;
 
         AsyncMqttClient client;
 
@@ -40,16 +42,31 @@ namespace net::mqtt
         uint16_t g_port = 1883;
 
         uint32_t g_lastAttempt = 0;
-        bool g_wantDiscovery = false;
         // "Reconnect" on a live connection: disconnect first, connect again as
         // soon as the TCP side reports the close - not after the retry period.
         bool g_reconnectRequested = false;
 
-        // onDisconnect runs from the TCP stack; it records the reason and
-        // tick() writes the log line.
-        volatile int8_t g_reason = 0;
-        volatile bool g_reasonDirty = false; // volatile, not atomic: xtensa-lx106 has no __atomic_exchange_1
+        // AsyncMqttClient fires its callbacks from the TCP stack. They only post
+        // what happened here; tick() does the logging, the subscribe and the
+        // publishes from loop(), where a String and a full stack are safe.
+        hal::Mailbox<int8_t> g_reason;
+        hal::Mailbox<bool> g_connected;
         String g_lastError;
+
+        // Inbound commands wait here for tick(). Fixed slots, not Strings: the
+        // callback must not allocate, and a command is a topic suffix plus a
+        // short value.
+        // Single producer (the callback), single consumer (tick()), so the two
+        // indices need no lock: each is written by one side only.
+        struct Command
+        {
+            char topic[32];
+            char value[64];
+        };
+        constexpr uint8_t kQueueSize = 4; // Home Assistant sends on + brightness + effect in one burst
+        Command g_queue[kQueueSize];
+        std::atomic<uint8_t> g_queueHead{0};
+        std::atomic<uint8_t> g_queueTail{0};
 
         const __FlashStringHelper* reasonText(AsyncMqttClientDisconnectReason r)
         {
@@ -153,31 +170,39 @@ namespace net::mqtt
                        size_t len, size_t index, size_t total)
         {
             // Commands are short; anything fragmented or oversized is not one.
-            if (index != 0 || total != len || len > kMaxPayload) return;
+            if (index != 0 || total != len || len >= sizeof(Command::value)) return;
             if (strncmp(topic, g_cmdPrefix.c_str(), g_cmdPrefix.length()) != 0) return;
+            const char* suffix = topic + g_cmdPrefix.length();
+            if (strlen(suffix) >= sizeof(Command::topic)) return;
 
-            String value;
-            value.reserve(len);
-            for (size_t i = 0; i < len; ++i) value += payload[i];
-            value.trim();
+            const uint8_t head = g_queueHead.load(std::memory_order_relaxed);
+            const uint8_t next = uint8_t((head + 1) % kQueueSize);
+            if (next == g_queueTail.load(std::memory_order_acquire)) return; // full: loop() is behind, drop
 
-            handleCommand(topic + g_cmdPrefix.length(), value);
+            Command& c = g_queue[head];
+            strcpy(c.topic, suffix);
+            memcpy(c.value, payload, len);
+            c.value[len] = '\0';
+            g_queueHead.store(next, std::memory_order_release);
         }
 
-        void onConnect(bool)
+        void drainCommands()
         {
-            logInfo(F("MQTT: подключено"));
-            client.subscribe((g_cmdPrefix + '#').c_str(), 1);
-            publish(topic("avail"), "online", true);
-            // Discovery and state go out from tick(), not from inside the callback.
-            g_wantDiscovery = true;
+            uint8_t tail = g_queueTail.load(std::memory_order_relaxed);
+            while (tail != g_queueHead.load(std::memory_order_acquire))
+            {
+                Command& c = g_queue[tail];
+                String value(c.value);
+                value.trim();
+                handleCommand(c.topic, value);
+                tail = uint8_t((tail + 1) % kQueueSize);
+                g_queueTail.store(tail, std::memory_order_release);
+            }
         }
 
-        void onDisconnect(AsyncMqttClientDisconnectReason reason)
-        {
-            g_reason = int8_t(reason);
-            g_reasonDirty = true;
-        }
+        void onConnect(bool) { g_connected.set(true); }
+
+        void onDisconnect(AsyncMqttClientDisconnectReason reason) { g_reason.set(int8_t(reason)); }
     }
 
     // ------------------------------------------------------------------ public --
@@ -190,13 +215,18 @@ namespace net::mqtt
         db.init(kMqttUser, "");
         db.init(kMqttPass, "");
 
+        g_host = db.get(kMqttHost).toString();
+        g_host.trim();
+
         client.onConnect(onConnect);
         client.onDisconnect(onDisconnect);
         client.onMessage(onMessage);
         client.setKeepAlive(kKeepAliveS);
     }
 
-    bool configured() { return !hal::database().get(kMqttHost).toString().isEmpty(); }
+    // From the cached host, not the database: this is asked every loop for
+    // the status pixel, and a String out of GyverDB is a heap allocation.
+    bool configured() { return !g_host.isEmpty(); }
 
     void reconnect()
     {
@@ -246,10 +276,10 @@ namespace net::mqtt
 
     void tick(uint32_t nowMs)
     {
-        if (g_reasonDirty)
+        int8_t code = 0;
+        if (g_reason.take(code))
         {
-            g_reasonDirty = false;
-            const auto reason = AsyncMqttClientDisconnectReason(g_reason);
+            const auto reason = AsyncMqttClientDisconnectReason(code);
             g_lastError = String(reasonText(reason)) + F(" [") + int(reason) + ']';
             logWarn(String(F("MQTT: отключено: ")) + g_lastError);
             if (g_reconnectRequested)
@@ -259,12 +289,17 @@ namespace net::mqtt
             }
         }
 
-        if (g_wantDiscovery && client.connected())
+        bool connectedNow = false;
+        if (g_connected.take(connectedNow) && client.connected())
         {
-            g_wantDiscovery = false;
+            logInfo(F("MQTT: подключено"));
+            client.subscribe((g_cmdPrefix + '#').c_str(), 1);
+            publish(topic("avail"), "online", true);
             publishDiscovery();
             publishState();
         }
+
+        drainCommands();
         if (!client.connected() && configured() && WiFi.status() == WL_CONNECTED &&
             nowMs - g_lastAttempt >= kRetryMs)
         {

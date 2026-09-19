@@ -14,7 +14,7 @@ namespace
         // WS2812B zero-pulse timing, the one that lights random pixels when the
         // level shifter is marginal.
         core::Param pattern{*this, "pattern", "Узор", core::Select{
-            "Чёрный;Один красный;Бегущий белый;Белый 1/255;Белый 16/255;Красный;Оттенок по индексу", 1}};
+            "Чёрный;Один красный;Бегущий белый;Белый 1/255;Белый 16/255;Красный;Оттенок по индексу;Белый", 1}};
 
         void render(core::Frame& f, uint16_t dtMs) override
         {
@@ -37,6 +37,8 @@ namespace
                 case 6:
                     for (uint16_t i = 0; i < f.count(); ++i) f[i] = CHSV(uint8_t(i), 255, 255);
                     break;
+                // Full white: the heaviest frame there is, for the current limit and the supply.
+                case 7: f.fill(CRGB::White); break;
                 default: break;
             }
         }
