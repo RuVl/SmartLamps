@@ -12,7 +12,6 @@ extern "C" {
 #include "Log.h"
 #include "Mqtt.h"
 #include "Ota.h"
-#include "Psk.h"
 #include "hal/Database.h"
 #include "hal/Mailbox.h"
 
@@ -35,8 +34,6 @@ namespace net::wifi
         String g_lastError; // what the panel shows next to the LED
         bool g_connecting = false;
         bool g_apClosing = false;
-        String g_pskSsid; // the network the key being derived is for
-        uint32_t g_pskId = 0;
 
         // WiFi.mode() waits for the SDK to finish the switch: esp_delay() in
         // the loop() context, 100 ms at the least and up to a second, and no
@@ -112,9 +109,13 @@ namespace net::wifi
         GyverDBFile& db = hal::database();
         db.init(kWifiSsid, "");
         db.init(kWifiPass, "");
-        db.init(kWifiPsk, "");
-        db.init(kWifiPskFor, 0);
 
+        // Persistent, so the SDK keeps the station config - and the WPA2 key
+        // it derives from the passphrase - in its own flash sector. Deriving
+        // that key is 4096 rounds of HMAC-SHA1 in the sys context, close to a
+        // second with no frame on the matrix; with the config stored it is
+        // paid once, when the credentials change, not on every boot.
+        WiFi.persistent(true);
         // AP+STA from the start so the panel is reachable while STA is trying.
         WiFi.mode(WIFI_AP_STA);
 #ifndef ESP32
@@ -127,20 +128,6 @@ namespace net::wifi
         WiFi.setHostname(lampName().c_str());
 #else
         WiFi.hostname(lampName());
-#endif
-
-#if defined(LAMP_MEMLOG) && !defined(ESP32)
-        // Bench only: the RFC 6070 vector, PBKDF2-HMAC-SHA1("password", "salt",
-        // 4096) = 4b007901b765489abead49d926f721d065a429c1, and how long the
-        // whole derivation takes on this core.
-        {
-            const uint32_t t0 = millis();
-            psk::start(F("salt"), F("password"));
-            while (!psk::step()) {}
-            Serial.printf("psk self-test: %s, %u ms\n",
-                          psk::key().startsWith(F("4b007901b765489abead49d926f721d065a429c1")) ? "ok" : "FAIL",
-                          unsigned(millis() - t0));
-        }
 #endif
 
         WiFiConnector.onConnect(onConnected);
@@ -178,25 +165,7 @@ namespace net::wifi
         g_lastError = "";
         g_connecting = true;
         logInfo(String(F("WiFi: подключаюсь к ")) + ssid);
-
-        // The SDK gets the derived key, never the passphrase - see Psk.h. The
-        // key is cached with the id of the pair it was made from, so a changed
-        // password or network is derived afresh and an unchanged one never.
-        const String pass = db.get(kWifiPass).toString();
-        if (pass.isEmpty())
-        {
-            WiFiConnector.connect(ssid, pass);
-            return;
-        }
-        g_pskId = psk::id(ssid, pass);
-        const String cached = db.get(kWifiPsk).toString();
-        if (uint32_t(db.get(kWifiPskFor).toInt32()) == g_pskId && cached.length() == 64)
-        {
-            WiFiConnector.connect(ssid, cached);
-            return;
-        }
-        g_pskSsid = ssid;
-        psk::start(ssid, pass);
+        WiFiConnector.connect(ssid, db.get(kWifiPass).toString());
     }
 
     void tick()
@@ -212,14 +181,6 @@ namespace net::wifi
                 g_lastLoggedReason = code;
                 logWarn(String(F("WiFi: отключено: ")) + g_lastError);
             }
-        }
-
-        if (psk::busy() && psk::step())
-        {
-            GyverDBFile& db = hal::database();
-            db.set(kWifiPsk, psk::key());
-            db.set(kWifiPskFor, int32_t(g_pskId));
-            WiFiConnector.connect(g_pskSsid, psk::key());
         }
 
         WiFiConnector.tick();

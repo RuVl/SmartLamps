@@ -18,9 +18,6 @@ namespace net
     constexpr size_t kLampName = "lamp_name"_h;
     constexpr size_t kPairName = "pair_name"_h;
     constexpr size_t kPanelPass = "panel_pass"_h;
-    // The derived WPA2 key and the id of the (ssid, pass) pair it belongs to.
-    constexpr size_t kWifiPsk = "wifi_psk"_h;
-    constexpr size_t kWifiPskFor = "wifi_psk_for"_h;
 
     // Ids of panel widgets that are not bound to the database.
     constexpr size_t kIdPower = "ui_power"_h;
