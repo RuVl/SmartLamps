@@ -64,9 +64,29 @@ namespace hal
         };
     }
 
+#ifdef LAMP_BUTTON_DISABLED
+    // The pad is wired but not trusted yet: it fires gestures on its own, which
+    // would ruin any test that watches the lamp's state. The pin is left alone.
+    namespace
+    {
+        class NoButton final : public Button
+        {
+        public:
+            void begin() override {}
+            Gesture poll() override { return Gesture::None; }
+        };
+    }
+
+    Button& button()
+    {
+        static NoButton instance;
+        return instance;
+    }
+#else
     Button& button()
     {
         static TouchButton instance;
         return instance;
     }
+#endif
 }
