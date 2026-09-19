@@ -112,6 +112,12 @@ namespace net::wifi
 
         // AP+STA from the start so the panel is reachable while STA is trying.
         WiFi.mode(WIFI_AP_STA);
+#ifndef ESP32
+        // Station-only mode lets the SDK open modem sleep ("pm open" in the
+        // boot log); with the I2S DMA feeding the strip that ends in a hard
+        // hang and a hardware-watchdog reset seconds after the AP is closed.
+        WiFi.setSleepMode(WIFI_NONE_SLEEP);
+#endif
 #ifdef ESP32
         WiFi.setHostname(lampName().c_str());
 #else

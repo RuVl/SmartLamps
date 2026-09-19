@@ -31,7 +31,8 @@ namespace net
             const uint32_t gap = nowMs - g_lastLoopMs;
             const bool first = g_lastLoopMs == 0;
             g_lastLoopMs = nowMs;
-            if (first || gap < kStallMs || nowMs - g_lastStallLogMs < kStallLogGapMs) return;
+            if (first || gap < kStallMs) return;
+            if (g_lastStallLogMs != 0 && nowMs - g_lastStallLogMs < kStallLogGapMs) return;
             g_lastStallLogMs = nowMs;
             logWarn(String(F("цикл стоял ")) + gap + F(" мс"));
         }

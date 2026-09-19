@@ -44,7 +44,18 @@ namespace net::ota
         if (g_started) return;
         g_started = true;
         ArduinoOTA.setPassword(LAMP_OTA_PASS);
+        // No mDNS. It joins the multicast group on every interface, the access
+        // point's included, and when the AP goes away right after the station
+        // comes up, lwIP's IGMP timer still reports for the deleted interface
+        // through a dangling link-output pointer: Exception (0) in sys context
+        // on every boot (igmp_tmr -> new_linkoutput, seen on lamp B). OTA by
+        // IP address works without it.
+#ifdef ESP32
+        ArduinoOTA.setMdnsEnabled(false);
         ArduinoOTA.begin();
+#else
+        ArduinoOTA.begin(false);
+#endif
         logInfo(F("OTA: слушаю"));
     }
 

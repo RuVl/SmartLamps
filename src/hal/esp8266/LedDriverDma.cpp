@@ -49,7 +49,23 @@ namespace hal
 
             void show(uint8_t brightness) override
             {
-                if (pixels_ == nullptr || !bus.CanShow()) return;
+                if (pixels_ == nullptr) return;
+#ifdef LAMP_MEMLOG
+                // Bench only: a picture that stands still while loop() runs
+                // means the DMA never reported the previous frame as sent.
+                if (!bus.CanShow())
+                {
+                    ++skipped_;
+                    return;
+                }
+                const uint32_t now = millis();
+                if (lastShowMs_ != 0 && now - lastShowMs_ >= 100)
+                    Serial.printf("dma: gap %u ms, %u frames skipped\n", unsigned(now - lastShowMs_), unsigned(skipped_));
+                lastShowMs_ = now;
+                skipped_ = 0;
+#else
+                if (!bus.CanShow()) return;
+#endif
                 // Brightness is applied while copying, so the frame the effect drew
                 // stays untouched and the next frame starts from full-range colour.
                 for (uint16_t i = 0; i < count_; ++i)
@@ -67,6 +83,10 @@ namespace hal
         private:
             CRGB* pixels_ = nullptr;
             uint16_t count_ = 0;
+#ifdef LAMP_MEMLOG
+            uint32_t lastShowMs_ = 0;
+            uint32_t skipped_ = 0;
+#endif
         };
     }
 
