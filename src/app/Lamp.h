@@ -100,13 +100,14 @@ namespace app
 
         void applyTransition(uint16_t dtMs, uint8_t& brightnessOut);
 
-        void drawStatus(core::Frame& f, uint32_t nowMs);
+        void drawStatus(core::Frame& f, uint32_t nowMs, uint8_t brightness);
 
         void markChanged() { changed_ = true; }
 
         static constexpr uint16_t kPixelCount = MATRIX_WIDTH * MATRIX_HEIGHT;
         static constexpr uint16_t kFrameIntervalMs = 1000 / 60;
         static constexpr uint16_t kTransitionMs = 300;
+        // What the status pixel is shown at when the lamp is dark.
         static constexpr uint8_t kStatusMinBrightness = 24;
         // Holding the pad sweeps 0→100 in about three seconds.
         static constexpr uint16_t kHoldStepMs = 30;
@@ -121,9 +122,9 @@ namespace app
         // load/store only - see Mailbox.h
         std::atomic<bool> wantOn_{true};
         std::atomic<core::EffectInfo*> wantEffect_{nullptr};
-        std::atomic<uint8_t> brightnessScaled_{128};
+        std::atomic<uint8_t> brightnessScaled_{0}; // both set by begin(), together
         std::atomic<Status> status_{Status::Ok};
-        uint8_t brightnessPercent_ = 50;
+        uint8_t brightnessPercent_ = 0;
         uint16_t effectIndex_ = 0;
         uint16_t currentLimitMa_ = LED_CURRENT_LIMIT_MA;
         bool changed_ = false;

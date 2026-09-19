@@ -2,6 +2,8 @@
 
 #include <string.h>
 
+#include <algorithm>
+
 #include "Keys.h"
 #include "core/PostFX.h"
 #include "hal/LedDriver.h"
@@ -41,7 +43,10 @@ namespace app
         hal::storage().initInt(app::keys::kBrightness, 50);
         hal::storage().initInt(app::keys::kEffect, 0);
         wantOn_ = hal::storage().getInt(app::keys::kPower, 1) != 0;
-        setBrightness(uint8_t(hal::storage().getInt(app::keys::kBrightness, 50)));
+        // Not through setBrightness(): it skips a value equal to the current
+        // one, and the scaled value must be computed regardless.
+        brightnessPercent_ = uint8_t(hal::storage().getInt(app::keys::kBrightness, 50));
+        brightnessScaled_.store(core::gammaCorrect(brightnessPercent_), std::memory_order_relaxed);
 
         const int32_t saved = hal::storage().getInt(app::keys::kEffect, 0);
         selectEffect(uint16_t(saved < 0 ? 0 : saved));
@@ -83,9 +88,12 @@ namespace app
 
         if (status() != Status::Ok)
         {
-            drawStatus(frame, nowMs);
-            // A dark lamp still has to show that it is waiting for WiFi.
-            if (brightness < kStatusMinBrightness) brightness = kStatusMinBrightness;
+            // A dark lamp still has to show that it is waiting for WiFi. A lit
+            // one keeps its own brightness - the floor used to lift the whole
+            // frame, so a lamp at 5 % ran at 20 % until the broker answered,
+            // then dropped - and the pixel is boosted instead.
+            if (!drawing) brightness = kStatusMinBrightness;
+            drawStatus(frame, nowMs, brightness);
         }
 
         // Effects draw at full range; the supply limit is applied here, once, to the finished frame.
@@ -106,7 +114,7 @@ namespace app
         return core::Frame(pixels_, indexMap_, geometry_);
     }
 
-    void Lamp::drawStatus(core::Frame& f, uint32_t nowMs)
+    void Lamp::drawStatus(core::Frame& f, uint32_t nowMs, uint8_t brightness)
     {
         // Top-left pixel, breathing slowly so it reads as "state", not "stuck".
         // The eye is logarithmic: a linear 96..255 swing looks like a steady
@@ -126,6 +134,14 @@ namespace app
         case Status::Updating: c = CRGB(breath, breath, breath);
             break; // white
         default: return;
+        }
+        // Below the floor the pixel makes up the difference itself, as far as
+        // 255 allows.
+        if (brightness < kStatusMinBrightness)
+        {
+            const uint16_t gain = uint16_t(kStatusMinBrightness * 256u / (brightness ? brightness : 1));
+            auto boost = [gain](uint8_t v) { return uint8_t(std::min<uint32_t>(255, uint32_t(v) * gain / 256)); };
+            c = CRGB(boost(c.r), boost(c.g), boost(c.b));
         }
         f.at(0, uint8_t(f.height() - 1)) = c;
     }
