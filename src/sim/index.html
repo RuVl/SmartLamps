@@ -225,7 +225,8 @@
             o.selected = effect === state.effect;
             fx.append(o)
         }
-        fx.onchange = () => query('/api/effect', fx.value).then(load);
+        // The parameters are reloaded on the 'state' event, once the effect is built.
+        fx.onchange = () => query('/api/effect', fx.value);
 
         const br = document.getElementById('br');
         const bv = document.getElementById('bv');
@@ -300,7 +301,9 @@
     let onFrame = null; // set by the 3D view once it is up
 
     let n = 0, t = performance.now();
-    new EventSource('/events').onmessage = e => {
+    const events = new EventSource('/events');
+    events.addEventListener('state', load);
+    events.onmessage = e => {
         const h = e.data;
         for (let i = 0; i < 256; i++) {
             const r = parseInt(h.substr(i * 6, 2), 16);

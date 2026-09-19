@@ -207,6 +207,9 @@ void HttpServer::broadcast()
         msg += hex[v & 15];
     }
     msg += "\n\n";
+    // The new effect exists only after the fade-out; the page must not read
+    // its parameters before that. Same fix as the lamp's panel (WebUi.cpp).
+    if (app::lamp().consumeActivated()) msg += "event: state\ndata: 1\n\n";
 
     for (size_t i = 0; i < streams_.size();)
     {
