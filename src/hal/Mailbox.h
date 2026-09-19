@@ -6,10 +6,13 @@
 // code here and tick() take()s it, so the log line is written from loop().
 //
 // Plain load/store only, never exchange: xtensa-lx106 has no __atomic_exchange_1
-// and would fail to link. A single-word store is atomic on both targets, and the
-// release/acquire pair keeps the value visible before the flag on the ESP32's
-// second core. The producer may overwrite an unread value; the consumer then
-// sees only the latest one, which for a "why did it drop" code is the right one.
+// and would fail to link. A single-word store is atomic on both targets. The
+// fences are Dekker's: set() publishes the value before the flag, and take()
+// clears the flag before it reads the value - a StoreLoad pair, which only a
+// full fence orders (one memw on xtensa). So a set() that lands between the
+// two is never lost: the next take() sees its flag, at worst as a duplicate.
+// The producer may overwrite an unread value; the consumer then sees only
+// the latest one, which for a "why did it drop" code is the right one.
 
 #include <atomic>
 
@@ -22,17 +25,16 @@ namespace hal
         void set(T v)
         {
             value_.store(v, std::memory_order_relaxed);
-            dirty_.store(true, std::memory_order_release);
+            std::atomic_thread_fence(std::memory_order_seq_cst);
+            dirty_.store(true, std::memory_order_relaxed);
         }
 
-        // The flag is cleared before the value is read, so a set() landing in
-        // between is not lost - the next take() sees it again, at worst as a
-        // duplicate.
         bool take(T& v)
         {
-            if (!dirty_.load(std::memory_order_acquire)) return false;
+            if (!dirty_.load(std::memory_order_relaxed)) return false;
             dirty_.store(false, std::memory_order_relaxed);
-            v = value_.load(std::memory_order_acquire);
+            std::atomic_thread_fence(std::memory_order_seq_cst);
+            v = value_.load(std::memory_order_relaxed);
             return true;
         }
 

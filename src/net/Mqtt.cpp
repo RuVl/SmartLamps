@@ -7,14 +7,9 @@
 #include <AsyncMqttClient.h>
 #include <atomic>
 #include <string.h>
-#ifdef ESP32
-#include <WiFi.h>
-#else
-#include <ESP8266WiFi.h>
-#endif
-
 
 #include "Config.h"
+#include "WiFiHeader.h"
 #include "Log.h"
 #include "app/Lamp.h"
 #include "core/Registry.h"
@@ -49,8 +44,8 @@ namespace net::mqtt
         // AsyncMqttClient fires its callbacks from the TCP stack. They only post
         // what happened here; tick() does the logging, the subscribe and the
         // publishes from loop(), where a String and a full stack are safe.
-        hal::Mailbox<int8_t> g_reason;
-        hal::Mailbox<bool> g_connected;
+        hal::Mailbox<AsyncMqttClientDisconnectReason> g_reason;
+        hal::Mailbox<bool> g_connected; // an event, not a state: the value is always true
         String g_lastError;
 
         // Inbound commands wait here for tick(). Fixed slots, not Strings: the
@@ -63,10 +58,14 @@ namespace net::mqtt
             char topic[32];
             char value[64];
         };
-        constexpr uint8_t kQueueSize = 4; // Home Assistant sends on + brightness + effect in one burst
+        // One slot stays empty, so this holds 7: Home Assistant sends on +
+        // brightness + effect in one burst, and retained commands arrive in one
+        // segment on subscribe.
+        constexpr uint8_t kQueueSize = 8;
         Command g_queue[kQueueSize];
         std::atomic<uint8_t> g_queueHead{0};
         std::atomic<uint8_t> g_queueTail{0};
+        std::atomic<uint8_t> g_dropped{0}; // counted in the callback, reported from tick()
 
         const __FlashStringHelper* reasonText(AsyncMqttClientDisconnectReason r)
         {
@@ -177,7 +176,11 @@ namespace net::mqtt
 
             const uint8_t head = g_queueHead.load(std::memory_order_relaxed);
             const uint8_t next = uint8_t((head + 1) % kQueueSize);
-            if (next == g_queueTail.load(std::memory_order_acquire)) return; // full: loop() is behind, drop
+            if (next == g_queueTail.load(std::memory_order_acquire))
+            {
+                g_dropped.store(uint8_t(g_dropped.load(std::memory_order_relaxed) + 1), std::memory_order_relaxed);
+                return; // full: loop() is behind
+            }
 
             Command& c = g_queue[head];
             strcpy(c.topic, suffix);
@@ -188,6 +191,12 @@ namespace net::mqtt
 
         void drainCommands()
         {
+            const uint8_t dropped = g_dropped.load(std::memory_order_relaxed);
+            if (dropped != 0)
+            {
+                g_dropped.store(0, std::memory_order_relaxed);
+                logWarn(String(F("MQTT: очередь команд переполнена, потеряно ")) + dropped);
+            }
             uint8_t tail = g_queueTail.load(std::memory_order_relaxed);
             while (tail != g_queueHead.load(std::memory_order_acquire))
             {
@@ -202,7 +211,7 @@ namespace net::mqtt
 
         void onConnect(bool) { g_connected.set(true); }
 
-        void onDisconnect(AsyncMqttClientDisconnectReason reason) { g_reason.set(int8_t(reason)); }
+        void onDisconnect(AsyncMqttClientDisconnectReason reason) { g_reason.set(reason); }
     }
 
     // ------------------------------------------------------------------ public --
@@ -215,8 +224,9 @@ namespace net::mqtt
         db.init(kMqttUser, "");
         db.init(kMqttPass, "");
 
-        g_host = db.get(kMqttHost).toString();
-        g_host.trim();
+        // Built once: the callback reads it, and a reassignment from loop()
+        // under its feet would be a race on the ESP32. A renamed lamp restarts.
+        g_cmdPrefix = topic("cmd/");
 
         client.onConnect(onConnect);
         client.onDisconnect(onDisconnect);
@@ -224,19 +234,20 @@ namespace net::mqtt
         client.setKeepAlive(kKeepAliveS);
     }
 
-    // From the cached host, not the database: this is asked every loop for
-    // the status pixel, and a String out of GyverDB is a heap allocation.
-    bool configured() { return !g_host.isEmpty(); }
+    // Straight from the database, so a host typed into the panel counts at
+    // once: the retry in tick() dials it and the status pixel turns magenta
+    // without a button. length() on the entry is a view, no allocation.
+    bool configured() { return hal::database().get(kMqttHost).length() != 0; }
 
     void reconnect()
     {
         GyverDBFile& db = hal::database();
-        g_host = db.get(kMqttHost).toString();
-        g_host.trim();
+        g_host = hal::dbString(kMqttHost);
         if (g_host.isEmpty())
         {
             g_lastError = F("сервер не задан");
             logInfo(F("MQTT: сервер не задан"));
+            if (client.connected()) client.disconnect(); // an erased server means hang up
             return;
         }
         if (WiFi.status() != WL_CONNECTED)
@@ -251,7 +262,6 @@ namespace net::mqtt
         g_pass = db.get(kMqttPass).toString();
         g_clientId = lampName();
         g_willTopic = topic("avail");
-        g_cmdPrefix = topic("cmd/");
 
         if (client.connected())
         {
@@ -276,10 +286,9 @@ namespace net::mqtt
 
     void tick(uint32_t nowMs)
     {
-        int8_t code = 0;
-        if (g_reason.take(code))
+        AsyncMqttClientDisconnectReason reason{};
+        if (g_reason.take(reason))
         {
-            const auto reason = AsyncMqttClientDisconnectReason(code);
             g_lastError = String(reasonText(reason)) + F(" [") + int(reason) + ']';
             logWarn(String(F("MQTT: отключено: ")) + g_lastError);
             if (g_reconnectRequested)
@@ -328,8 +337,7 @@ namespace net::mqtt
         doc["brightness"] = lamp.brightness();
         doc["effect"] = lamp.effectName();
         JsonObject params = doc["params"].to<JsonObject>();
-        for (core::Param* p = lamp.params(); p != nullptr; p = p->next())
-            params[p->key()] = p->get();
+        lamp.forEachParam([&](core::Param& p) { params[p.key()] = p.get(); });
         doc["fps"] = lamp.fps();
         doc["rssi"] = WiFi.RSSI();
 
