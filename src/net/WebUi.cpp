@@ -21,6 +21,7 @@
 
 #include "Config.h"
 #include "Log.h"
+#include "MemLog.h"
 #include "Mqtt.h"
 #include "Wifi.h"
 #include "app/Keys.h"
@@ -63,21 +64,6 @@ namespace net::web
         uint32_t g_lastPushMs = 0;
         bool g_reloadPending = false;
 
-#ifdef LAMP_MEMLOG
-        uint32_t g_buildSpLow = UINT32_MAX;
-
-        // The build runs on the SDK's sys stack; sampling a1 here is the only way
-        // to learn how much of it a page costs.
-        void sampleStack()
-        {
-            uint32_t sp;
-            asm volatile("mov %0, a1" : "=r"(sp));
-            if (sp < g_buildSpLow) g_buildSpLow = sp;
-        }
-#else
-        inline void sampleStack() {}
-#endif
-
         // Claims the right to send one unsolicited WebSocket message now.
         bool pushSlot()
         {
@@ -89,9 +75,7 @@ namespace net::web
 
         bool trimVal(size_t key)
         {
-            String s = hal::database().get(key).toString();
-            s.trim();
-            return hal::database().GyverDB::update(key, s);
+            return hal::database().GyverDB::update(key, hal::dbString(key));
         }
 
         // One widget per Param::Kind. Returns true when the panel changed the value.
@@ -135,17 +119,17 @@ namespace net::web
 
             // Everything below comes from the effect's Param declarations. The keys
             // are the same ones Lamp reads the parameters back from at boot.
-            if (lamp.params() != nullptr)
+            if (lamp.hasParams())
             {
                 sets::Group group(b, "Параметры");
-                for (core::Param* p = lamp.params(); p != nullptr; p = p->next())
+                const char* effect = lamp.effectName();
+                lamp.forEachParam([&](core::Param& p)
                 {
-                    const size_t id = hal::paramKey(lamp.effectName(), p->key());
+                    const size_t id = hal::paramKey(effect, p.key());
                     // A Switch lands in the database as a bool; toInt() reads it as 0/1.
-                    if (paramWidget(b, id, *p))
-                        lamp.setParam(p->key(), int16_t(db.get(id).toInt()));
-                }
-                sampleStack();
+                    if (paramWidget(b, id, p)) lamp.setParam(p.key(), int16_t(db.get(id).toInt()));
+                });
+                memlog::sampleStack();
             }
         }
 
@@ -207,7 +191,7 @@ namespace net::web
             // Keep this the only b.Log(): each copy is ~1 KB in the page and in
             // every pushLog() packet - see docs/memory-esp8266.md.
             b.Log(kIdLog, log());
-            sampleStack();
+            memlog::sampleStack();
         }
 
         void build(sets::Builder& b)
@@ -286,8 +270,4 @@ namespace net::web
     }
 
     bool focused() { return settings.focused(); }
-
-#ifdef LAMP_MEMLOG
-    uint32_t buildStackLow() { return g_buildSpLow; }
-#endif
 }

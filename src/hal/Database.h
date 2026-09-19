@@ -10,4 +10,13 @@
 namespace hal
 {
     GyverDBFile& database();
+
+    // A string setting, trimmed: what the owner typed, without the space
+    // the phone's keyboard appends.
+    inline String dbString(size_t key)
+    {
+        String s = database().get(key).toString();
+        s.trim();
+        return s;
+    }
 }
