@@ -55,7 +55,7 @@ namespace net::mqtt
 
         // Inbound commands wait here for tick(). Fixed slots, not Strings: the
         // callback must not allocate, and a command is a topic suffix plus a
-        // short value ("effect" + an effect name is the longest there is).
+        // short value.
         // Single producer (the callback), single consumer (tick()), so the two
         // indices need no lock: each is written by one side only.
         struct Command
@@ -65,8 +65,8 @@ namespace net::mqtt
         };
         constexpr uint8_t kQueueSize = 4; // Home Assistant sends on + brightness + effect in one burst
         Command g_queue[kQueueSize];
-        std::atomic<uint8_t> g_queueHead{0}; // next slot the callback fills
-        std::atomic<uint8_t> g_queueTail{0}; // next slot tick() drains
+        std::atomic<uint8_t> g_queueHead{0};
+        std::atomic<uint8_t> g_queueTail{0};
 
         const __FlashStringHelper* reasonText(AsyncMqttClientDisconnectReason r)
         {

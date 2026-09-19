@@ -65,8 +65,7 @@ namespace hal
     }
 
 #ifdef LAMP_BUTTON_DISABLED
-    // The pad is wired but not trusted yet: it fires gestures on its own, which
-    // would ruin any test that watches the lamp's state. The pin is left alone.
+    // The pad on lamp B fires gestures on its own; see platformio.ini.
     namespace
     {
         class NoButton final : public Button

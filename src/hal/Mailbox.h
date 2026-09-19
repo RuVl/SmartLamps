@@ -25,9 +25,9 @@ namespace hal
             dirty_.store(true, std::memory_order_release);
         }
 
-        // True once per set(); v receives the latest value. The flag is cleared
-        // before the value is read, so a set() landing in between is not lost -
-        // the next take() sees it again, at worst as a duplicate.
+        // The flag is cleared before the value is read, so a set() landing in
+        // between is not lost - the next take() sees it again, at worst as a
+        // duplicate.
         bool take(T& v)
         {
             if (!dirty_.load(std::memory_order_acquire)) return false;

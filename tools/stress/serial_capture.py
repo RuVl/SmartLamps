@@ -6,7 +6,8 @@
 
 Writes out/run1.log (timestamped raw lines) and out/run1.csv (parsed `mem:` telemetry).
 Flags exceptions, resets, OOM and WS-queue overflows to stderr and to out/run1.events.
-Never writes to the port; DTR/RTS are held low before open so the board is not reset.
+Never writes to the port. Opening it still pulses RST once (CH340 toggles DTR/RTS on
+open): start the capture before a run and never reopen it mid-run.
 """
 import csv, os, re, sys, time
 import serial

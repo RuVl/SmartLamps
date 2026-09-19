@@ -184,7 +184,6 @@ namespace app
                     activate(pending_);
                     pending_ = nullptr;
                 }
-                // Fade back in unless the lamp was switched off meanwhile.
                 transition_ = litOn_ ? Transition::FadingIn : Transition::None;
                 transitionMs_ = 0;
             }
@@ -246,7 +245,6 @@ namespace app
         effectIndex_ = uint16_t(index % total);
         hal::storage().setInt(app::keys::kEffect, effectIndex_);
         markChanged();
-        // render() notices on its next frame and fades over to it.
         wantEffect_.store(core::Registry::at(effectIndex_), std::memory_order_relaxed);
     }
 

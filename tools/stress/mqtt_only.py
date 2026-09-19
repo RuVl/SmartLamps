@@ -3,7 +3,6 @@
 uv run --quiet --with paho-mqtt mqtt_only.py [reps]"""
 import os, sys, time
 import paho.mqtt.client as mqtt
-sys.path.insert(0, os.path.dirname(__file__))
 BROKER = os.environ.get("BROKER", "192.168.31.21"); NAME = os.environ.get("NAME", "Lamp8266")
 EFF = ["Тест", "Конфетти", "Снегопад", "Радуга", "Пейнтбол", "Шум 3D", "Матрица", "Светлячки",
        "Огонь", "Блуждающий кубик", "Смена цвета", "Метель"]

@@ -27,8 +27,7 @@ namespace net
         }
 
 #if defined(LAMP_MEMLOG) && defined(ESP8266)
-        // Memory telemetry for the test bench (env d1_mini_mem): one line a
-        // second, parsed by the capture script. Not built into the release.
+        // Test-bench telemetry (env d1_mini_mem); format parsed by tools/stress/serial_capture.py.
         uint32_t g_memLastMs = 0;
         uint32_t g_minFree = UINT32_MAX;
         uint32_t g_minBlock = UINT32_MAX;

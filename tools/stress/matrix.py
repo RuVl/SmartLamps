@@ -40,6 +40,7 @@ PARAMS = {  # key -> (min, max); Switch/Select spammed as 0..n
 }
 MEM_RE = re.compile(r"свободно (\d+) · минимум (\d+) · блок (\d+)(?: · стек loop (\d+))?")
 
+os.makedirs(os.path.dirname(OUT) or ".", exist_ok=True)
 csvf = open(OUT + ".csv", "a", buffering=1)
 if csvf.tell() == 0: csvf.write("t,case,step,free,min,blk,cont,page_bytes,complete\n")
 def log(*a): print(time.strftime("%H:%M:%S"), *a, flush=True)

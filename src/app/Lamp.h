@@ -10,8 +10,7 @@
 // there is no lock between them. The setters therefore never touch the
 // transition: they store what the owner wants (wantOn_, wantEffect_, single
 // atomic words), and render() compares that with what is on the matrix at the
-// start of every frame and drives the fade itself. Everything about the
-// transition is owned by render() alone.
+// start of every frame and drives the fade itself.
 
 #include <stdint.h>
 
@@ -119,8 +118,7 @@ namespace app
         // The active effect is built here, never on the heap.
         alignas(8) uint8_t arena_[EFFECT_ARENA_SIZE] = {};
         // --- written by the setters, read by render() ---
-        // Single-word atomics, load/store only: xtensa-lx106 has no atomic
-        // read-modify-write, and none is needed - the latest wish wins.
+        // load/store only - see Mailbox.h
         std::atomic<bool> wantOn_{true};
         std::atomic<core::EffectInfo*> wantEffect_{nullptr};
         std::atomic<uint8_t> brightnessScaled_{128};

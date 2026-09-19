@@ -24,7 +24,6 @@ namespace net::wifi
 
         uint32_t g_lostSince = 0;
 
-        // Why the station dropped, posted by the SDK's event and read by tick().
         hal::Mailbox<uint8_t> g_reason;
         uint8_t g_lastLoggedReason = 0;
         String g_lastError; // what the panel shows next to the LED

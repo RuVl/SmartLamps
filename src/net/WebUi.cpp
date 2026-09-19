@@ -204,10 +204,8 @@ namespace net::web
             b.Label(kIdMem, "Память, байт", mem);
 
             if (b.Button("Применить имя и перезагрузить")) g_pending = Pending::Restart;
-            // The one and only copy of the journal on the page. Every b.Log() is
-            // another kilobyte in the page and in every pushLog() packet, on a
-            // heap where the page build is already the largest transient - see
-            // docs/memory-esp8266.md.
+            // Keep this the only b.Log(): each copy is ~1 KB in the page and in
+            // every pushLog() packet - see docs/memory-esp8266.md.
             b.Log(kIdLog, log());
             sampleStack();
         }
@@ -229,11 +227,9 @@ namespace net::web
             g_effectOptions += e->name;
         }
 
-        // The build-time default lands in the database once, on a fresh flash,
-        // so a lamp is never reachable without a password until the owner sets
-        // one. From then on the panel's own field is the source of truth.
+        // init() writes only into a fresh database; afterwards the panel's own field wins.
         GyverDBFile& db = hal::database();
-        db.init(kPanelPass, LAMP_PANEL_PASS); // from secrets.ini
+        db.init(kPanelPass, LAMP_PANEL_PASS);
         const String pass = db.get(kPanelPass).toString();
         if (!pass.isEmpty()) settings.setPass(pass);
 
@@ -278,7 +274,6 @@ namespace net::web
         const uint32_t now = millis();
         if (now - last < kLogPushMs || !pushSlot()) return false;
         last = now;
-        // One packet for the journal and the status lines.
         // The Logger overload streams the journal straight into the packet: no
         // 1 KB String copy on the heap for every push.
         settings.updater()
