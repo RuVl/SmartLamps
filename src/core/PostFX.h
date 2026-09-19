@@ -12,6 +12,7 @@ namespace core
 {
     // Perceptual brightness: a slider at 50% should look half as bright, which a
     // linear scale does not deliver. GAMMA 1.5 matches the previous firmware.
+    // Only 0 % maps to 0; every other percentage keeps the strip lit.
     uint8_t gammaCorrect(uint8_t percent);
 
     // Estimated draw of the frame at the given brightness, in milliamps. Used to
