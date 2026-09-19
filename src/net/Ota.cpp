@@ -43,6 +43,9 @@ namespace net::ota
     {
         if (g_started) return;
         g_started = true;
+        // Without a password anyone on the home network could push firmware:
+        // the port is announced over mDNS under the lamp's own name.
+        ArduinoOTA.setPassword(LAMP_OTA_PASS); // from secrets.ini
         ArduinoOTA.begin();
         logInfo(F("OTA: слушаю"));
     }

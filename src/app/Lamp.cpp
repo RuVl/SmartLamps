@@ -40,13 +40,17 @@ namespace app
         hal::storage().initInt(app::keys::kPower, 1);
         hal::storage().initInt(app::keys::kBrightness, 50);
         hal::storage().initInt(app::keys::kEffect, 0);
-        on_ = hal::storage().getInt(app::keys::kPower, 1) != 0;
+        wantOn_ = hal::storage().getInt(app::keys::kPower, 1) != 0;
         setBrightness(uint8_t(hal::storage().getInt(app::keys::kBrightness, 50)));
 
         const int32_t saved = hal::storage().getInt(app::keys::kEffect, 0);
         selectEffect(uint16_t(saved < 0 ? 0 : saved));
 
-        // The lamp comes back exactly as it was left, without waiting for WiFi.
+        // No render task exists yet, so the render side is set up directly: the
+        // lamp comes back exactly as it was left and fades in without waiting
+        // for WiFi.
+        activate(wantEffect_);
+        litOn_ = wantOn_;
         transition_ = Transition::FadingIn;
         transitionMs_ = 0;
         changed_ = true;
@@ -67,15 +71,17 @@ namespace app
         const uint16_t dtMs = uint16_t(elapsed > 1000 ? 1000 : elapsed);
         core::Frame frame = frameOf();
 
+        syncRequests();
+
         // Keep drawing while fading out, so switching off is a fade, not a cut.
-        const bool drawing = on_ || transition_ == Transition::FadingOut;
+        const bool drawing = litOn_ || transition_ == Transition::FadingOut;
         if (drawing && effect_ != nullptr) effect_->render(frame, dtMs);
         else frame.clear();
 
-        uint8_t brightness = on_ ? brightnessScaled_ : 0;
+        uint8_t brightness = litOn_ ? brightnessScaled_.load(std::memory_order_relaxed) : 0;
         applyTransition(dtMs, brightness);
 
-        if (status_ != Status::Ok)
+        if (status() != Status::Ok)
         {
             drawStatus(frame, nowMs);
             // A dark lamp still has to show that it is waiting for WiFi.
@@ -109,7 +115,7 @@ namespace app
         const uint8_t breath = uint8_t(8 + scale8(dim8_video(cubicwave8(phase)), 247));
 
         CRGB c;
-        switch (status_)
+        switch (status())
         {
         case Status::AccessPoint: c = CRGB(0, 0, breath);
             break; // blue
@@ -124,6 +130,37 @@ namespace app
         f.at(0, uint8_t(f.height() - 1)) = c;
     }
 
+    void Lamp::syncRequests()
+    {
+        const bool wantOn = wantOn_.load(std::memory_order_relaxed);
+        if (wantOn != litOn_)
+        {
+            litOn_ = wantOn;
+            transition_ = wantOn ? Transition::FadingIn : Transition::FadingOut;
+            transitionMs_ = 0;
+        }
+
+        core::EffectInfo* wantEffect = wantEffect_.load(std::memory_order_relaxed);
+        if (wantEffect == nullptr || wantEffect == info_ || wantEffect == pending_) return;
+
+        // A dark lamp changes effect silently; a lit one fades out first and
+        // activate()s at the bottom of the fade. A second request during the
+        // fade-out just replaces pending_ - the fade is not restarted - and a
+        // switch-off during it keeps pending_: the fade ends in darkness with
+        // the new effect built, ready for the next switch-on.
+        if (!litOn_ && transition_ == Transition::None)
+        {
+            activate(wantEffect);
+            return;
+        }
+        pending_ = wantEffect;
+        if (transition_ != Transition::FadingOut)
+        {
+            transition_ = Transition::FadingOut;
+            transitionMs_ = 0;
+        }
+    }
+
     void Lamp::applyTransition(uint16_t dtMs, uint8_t& brightnessOut)
     {
         if (transition_ == Transition::None) return;
@@ -136,7 +173,8 @@ namespace app
         {
             // dim8_video squares the factor: linear in light is not linear to
             // the eye, which sees a plain 255→0 ramp as "nothing, then a cut".
-            brightnessOut = scale8(brightnessScaled_, dim8_video(uint8_t(255 - progress)));
+            const uint8_t full = brightnessScaled_.load(std::memory_order_relaxed);
+            brightnessOut = scale8(full, dim8_video(uint8_t(255 - progress)));
             if (transitionMs_ >= kTransitionMs)
             {
                 // Only now is the old effect destroyed and the new one built, so
@@ -145,12 +183,9 @@ namespace app
                 {
                     activate(pending_);
                     pending_ = nullptr;
-                    transition_ = Transition::FadingIn;
                 }
-                else
-                {
-                    transition_ = Transition::None; // faded out to off
-                }
+                // Fade back in unless the lamp was switched off meanwhile.
+                transition_ = litOn_ ? Transition::FadingIn : Transition::None;
                 transitionMs_ = 0;
             }
         }
@@ -165,30 +200,26 @@ namespace app
     {
         if (info == nullptr) return;
 
-        if (effect_ != nullptr)
-        {
-            effect_->~Effect();
-            effect_ = nullptr;
-        }
+        // effect_ is cleared first and published last, so the network side
+        // finds either the old list, the new one, or none - see Lamp.h.
+        core::Effect* old = effect_;
+        effect_ = nullptr;
+        if (old != nullptr) old->~Effect();
 
         info_ = info;
-        effect_ = info->construct(arena_);
-        loadParams(info);
-
-        core::Frame f = frameOf();
-        f.clear();
-        effect_->begin(f);
-        activated_ = true;
-    }
-
-    void Lamp::loadParams(core::EffectInfo* info)
-    {
-        for (core::Param* p = effect_->params(); p != nullptr; p = p->next())
+        core::Effect* fresh = info->construct(arena_);
+        for (core::Param* p = fresh->params(); p != nullptr; p = p->next())
         {
             const uint32_t key = hal::paramKey(info->name, p->key());
             hal::storage().initInt(key, p->def());
             p->set(int16_t(hal::storage().getInt(key, p->def())));
         }
+
+        core::Frame f = frameOf();
+        f.clear();
+        fresh->begin(f);
+        effect_ = fresh;
+        activated_ = true;
     }
 
     bool Lamp::setParam(const char* key, int16_t value)
@@ -213,20 +244,10 @@ namespace app
         if (total == 0) return;
 
         effectIndex_ = uint16_t(index % total);
-        core::EffectInfo* info = core::Registry::at(effectIndex_);
         hal::storage().setInt(app::keys::kEffect, effectIndex_);
         markChanged();
-
-        if (effect_ == nullptr)
-        {
-            activate(info); // first boot: nothing to fade out of
-            return;
-        }
-        if (info == info_) return;
-
-        pending_ = info;
-        transition_ = Transition::FadingOut;
-        transitionMs_ = 0;
+        // render() notices on its next frame and fades over to it.
+        wantEffect_.store(core::Registry::at(effectIndex_), std::memory_order_relaxed);
     }
 
     bool Lamp::selectEffect(const char* name)
@@ -248,13 +269,10 @@ namespace app
 
     void Lamp::setPower(bool on)
     {
-        if (on_ == on) return;
-        on_ = on;
+        if (isOn() == on) return;
+        wantOn_.store(on, std::memory_order_relaxed);
         hal::storage().setInt(app::keys::kPower, on ? 1 : 0);
         markChanged();
-        transition_ = on ? Transition::FadingIn : Transition::FadingOut;
-        transitionMs_ = 0;
-        if (!on) pending_ = nullptr; // fading out to darkness, not to an effect
     }
 
     void Lamp::setBrightness(uint8_t percent)
@@ -262,7 +280,7 @@ namespace app
         percent = percent > 100 ? 100 : percent;
         if (percent == brightnessPercent_) return;
         brightnessPercent_ = percent;
-        brightnessScaled_ = core::gammaCorrect(brightnessPercent_);
+        brightnessScaled_.store(core::gammaCorrect(brightnessPercent_), std::memory_order_relaxed);
         hal::storage().setInt(app::keys::kBrightness, brightnessPercent_);
         markChanged();
     }
@@ -276,8 +294,10 @@ namespace app
 
     bool Lamp::consumeActivated()
     {
-        const bool was = activated_;
-        activated_ = false;
+        // Load then store, not exchange (none on xtensa-lx106). An activation
+        // landing between the two is at least 300 ms after the previous one.
+        const bool was = activated_.load(std::memory_order_acquire);
+        if (was) activated_.store(false, std::memory_order_relaxed);
         return was;
     }
 

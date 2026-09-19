@@ -212,8 +212,11 @@ namespace net::web
             g_effectOptions += e->name;
         }
 
+        // The build-time default lands in the database once, on a fresh flash,
+        // so a lamp is never reachable without a password until the owner sets
+        // one. From then on the panel's own field is the source of truth.
         GyverDBFile& db = hal::database();
-        db.init(kPanelPass, "");
+        db.init(kPanelPass, LAMP_PANEL_PASS); // from secrets.ini
         const String pass = db.get(kPanelPass).toString();
         if (!pass.isEmpty()) settings.setPass(pass);
 
