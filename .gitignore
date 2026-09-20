@@ -17,3 +17,6 @@ secrets.ini
 # tools/stress output
 __pycache__/
 out/
+
+# Review copies of the schematics; the .py and .svg are the source of truth.
+docs/schematics/*.png
