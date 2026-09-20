@@ -21,6 +21,7 @@
 
 #include "Config.h"
 #include "Log.h"
+#include "MemLog.h"
 #include "Mqtt.h"
 #include "Wifi.h"
 #include "app/Keys.h"
@@ -74,9 +75,7 @@ namespace net::web
 
         bool trimVal(size_t key)
         {
-            String s = hal::database().get(key).toString();
-            s.trim();
-            return hal::database().GyverDB::update(key, s);
+            return hal::database().GyverDB::update(key, hal::dbString(key));
         }
 
         // One widget per Param::Kind. Returns true when the panel changed the value.
@@ -120,16 +119,17 @@ namespace net::web
 
             // Everything below comes from the effect's Param declarations. The keys
             // are the same ones Lamp reads the parameters back from at boot.
-            if (lamp.params() != nullptr)
+            if (lamp.hasParams())
             {
                 sets::Group group(b, "Параметры");
-                for (core::Param* p = lamp.params(); p != nullptr; p = p->next())
+                const char* effect = lamp.effectName();
+                lamp.forEachParam([&](core::Param& p)
                 {
-                    const size_t id = hal::paramKey(lamp.effectName(), p->key());
+                    const size_t id = hal::paramKey(effect, p.key());
                     // A Switch lands in the database as a bool; toInt() reads it as 0/1.
-                    if (paramWidget(b, id, *p))
-                        lamp.setParam(p->key(), int16_t(db.get(id).toInt()));
-                }
+                    if (paramWidget(b, id, p)) lamp.setParam(p.key(), int16_t(db.get(id).toInt()));
+                });
+                memlog::sampleStack();
             }
         }
 
@@ -139,11 +139,11 @@ namespace net::web
             if (b.Input(kWifiSsid, "Сеть (только 2,4 ГГц)")) trimVal(kWifiSsid);
             if (b.Pass(kWifiPass, "Пароль")) trimVal(kWifiPass);
             b.LED(kIdWifiLed, "Подключено", wifi::connected());
-            b.Label(kIdWifiState, "Состояние", wifi::status());
+            // Paragraph, not Label: a Label is one line on the right and the
+            // status with an IP, RSSI and a reason does not fit it.
+            b.Paragraph(kIdWifiState, "Состояние", wifi::status());
+            b.Log(kIdWifiLog, wifiLog());
             if (b.Button("Переподключить")) g_pending = Pending::WifiReconnect;
-            // The same journal as in "Система", here so the answer to "why not"
-            // is on the page where the credentials are typed.
-            b.Log(kIdWifiLog, log(), "Журнал");
         }
 
         void buildMqttMenu(sets::Builder& b)
@@ -154,9 +154,9 @@ namespace net::web
             if (b.Input(kMqttUser, "Пользователь")) trimVal(kMqttUser);
             if (b.Pass(kMqttPass, "Пароль")) trimVal(kMqttPass);
             b.LED(kIdMqttLed, "Подключено", mqtt::connected());
-            b.Label(kIdMqttState, "Состояние", mqtt::status());
+            b.Paragraph(kIdMqttState, "Состояние", mqtt::status());
+            b.Log(kIdMqttLog, mqttLog());
             if (b.Button("Переподключить")) g_pending = Pending::MqttReconnect;
-            b.Log(kIdMqttLog, log(), "Журнал");
         }
 
         void buildSystemMenu(sets::Builder& b)
@@ -174,7 +174,7 @@ namespace net::web
             info += F(" · ");
             info += app::lamp().fps();
             info += F(" к/с");
-            b.Label(kIdInfo, "Состояние", info);
+            b.Paragraph(kIdInfo, "Состояние", info);
 
             String mem;
             mem += F("свободно ");
@@ -189,10 +189,14 @@ namespace net::web
 #else
             mem += ESP.getMaxAllocHeap();
 #endif
-            b.Label(kIdMem, "Память, байт", mem);
+            b.Paragraph(kIdMem, "Память, байт", mem);
 
             if (b.Button("Применить имя и перезагрузить")) g_pending = Pending::Restart;
+            // The full journal lives here only; the WiFi and MQTT pages get
+            // their own short ones - every Log widget is its buffer's size in
+            // the page and in each pushLog() packet, see docs/memory-esp8266.md.
             b.Log(kIdLog, log());
+            memlog::sampleStack();
         }
 
         void build(sets::Builder& b)
@@ -212,8 +216,9 @@ namespace net::web
             g_effectOptions += e->name;
         }
 
+        // init() writes only into a fresh database; afterwards the panel's own field wins.
         GyverDBFile& db = hal::database();
-        db.init(kPanelPass, "");
+        db.init(kPanelPass, LAMP_PANEL_PASS);
         const String pass = db.get(kPanelPass).toString();
         if (!pass.isEmpty()) settings.setPass(pass);
 
@@ -258,18 +263,18 @@ namespace net::web
         const uint32_t now = millis();
         if (now - last < kLogPushMs || !pushSlot()) return false;
         last = now;
-        // One packet for every copy of the journal plus the status lines: the
-        // Log widget takes plain text, and Logger::_changed() would only let
-        // the first of three update(id, Logger&) calls through.
-        const String text = log().toString();
+        // The Logger overload streams the journal straight into the packet: no
+        // 1 KB String copy on the heap for every push.
         settings.updater()
-            .update(kIdLog, text)
-            .update(kIdWifiLog, text)
-            .update(kIdMqttLog, text)
+            .update(kIdLog, log())
+            .update(kIdWifiLog, wifiLog())
+            .update(kIdMqttLog, mqttLog())
             .update(kIdWifiState, wifi::status())
             .update(kIdMqttState, mqtt::status())
             .update(kIdWifiLed, wifi::connected())
             .update(kIdMqttLed, mqtt::connected());
         return true;
     }
+
+    bool focused() { return settings.focused(); }
 }

@@ -46,6 +46,9 @@ namespace core
 
         static EffectInfo* at(uint16_t index);
 
+        // Position of a registered effect; 0 for one that is not.
+        static uint16_t indexOf(const EffectInfo* info);
+
         static uint16_t count();
     };
 

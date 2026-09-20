@@ -38,6 +38,7 @@ public:
 
 private:
     static void reply(int fd, const char* status, const char* type, const std::string& body);
+    static void noContent(int fd) { reply(fd, "204 No Content", "text/plain", ""); }
     void handleRequest(int fd, const std::string& request);
     std::string stateJson() const;
 

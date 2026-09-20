@@ -4,13 +4,23 @@
 // This is the only place that knows about all three of core, hal and the
 // effect catalogue. Effects stay ignorant of it; the network layer drives it
 // through the setters and watches it through consumeChanged().
+//
+// On the ESP32-S3 render() runs in its own task while the setters are called
+// from loop(), from the panel's WebSocket callback and from the MQTT client -
+// there is no lock between them but the one on the effect arena. The setters
+// never touch the transition: they store what the owner wants (wantOn_,
+// wantEffect_, single atomic words), and render() compares that with what is
+// on the matrix at the start of every frame and drives the fade itself.
 
 #include <stdint.h>
+
+#include <atomic>
 
 #include "core/Frame.h"
 #include "core/Matrix.h"
 #include "core/Registry.h"
 #include "hal/Button.h"
+#include "hal/Lock.h"
 
 namespace app
 {
@@ -33,8 +43,8 @@ namespace app
         // --- state, callable from the button, the panel and MQTT ---
         void setPower(bool on);
 
-        void togglePower() { setPower(!on_); }
-        [[nodiscard]] bool isOn() const { return on_; }
+        void togglePower() { setPower(!isOn()); }
+        [[nodiscard]] bool isOn() const { return wantOn_.load(std::memory_order_relaxed); }
 
         void setBrightness(uint8_t percent);
 
@@ -49,14 +59,33 @@ namespace app
         void prevEffect();
 
         [[nodiscard]] uint16_t effectIndex() const { return effectIndex_; }
-        [[nodiscard]] const char* effectName() const { return info_ ? info_->name : ""; }
-        [[nodiscard]] core::Param* params() const { return effect_ ? effect_->params() : nullptr; }
+
+        [[nodiscard]] const char* effectName() const
+        {
+            hal::Guard guard(lock_);
+            return info_ ? info_->name : "";
+        }
+
+        // The active effect's parameters, walked under the arena lock; f may
+        // call setParam(). Nothing outside this class holds a Param pointer.
+        template <typename F>
+        void forEachParam(F&& f) const
+        {
+            hal::Guard guard(lock_);
+            for (core::Param* p = effect_ ? effect_->params() : nullptr; p != nullptr; p = p->next()) f(*p);
+        }
+
+        [[nodiscard]] bool hasParams() const
+        {
+            hal::Guard guard(lock_);
+            return effect_ != nullptr && effect_->params() != nullptr;
+        }
 
         // Sets a parameter of the active effect by key. False if there is none.
         bool setParam(const char* key, int16_t value);
 
-        void setStatus(Status s) { status_ = s; }
-        [[nodiscard]] Status status() const { return status_; }
+        void setStatus(Status s) { status_.store(s, std::memory_order_relaxed); }
+        [[nodiscard]] Status status() const { return status_.load(std::memory_order_relaxed); }
 
         // True once after any state change; the network publishes on it.
         bool consumeChanged();
@@ -66,7 +95,7 @@ namespace app
         // the new Param list exists, which is after the fade-out.
         bool consumeActivated();
 
-        [[nodiscard]] uint16_t fps() const { return fps_; }
+        [[nodiscard]] uint16_t fps() const { return fps_.load(std::memory_order_relaxed); }
 
         // Supply limit in mA, LED_CURRENT_LIMIT_MA by default. The simulator
         // toggles it to show the lamp with and without the limiter.
@@ -84,19 +113,27 @@ namespace app
 
         void activate(core::EffectInfo* info);
 
-        void loadParams(core::EffectInfo* info);
+        // Render side: picks up a changed wantOn_/wantEffect_ and starts the fade.
+        void syncRequests();
+
+        void startTransition(Transition t)
+        {
+            transition_ = t;
+            transitionMs_ = 0;
+        }
 
         void handle(hal::Gesture g, uint32_t nowMs);
 
         void applyTransition(uint16_t dtMs, uint8_t& brightnessOut);
 
-        void drawStatus(core::Frame& f, uint32_t nowMs);
+        void drawStatus(core::Frame& f, uint32_t nowMs, uint8_t brightness);
 
         void markChanged() { changed_ = true; }
 
         static constexpr uint16_t kPixelCount = MATRIX_WIDTH * MATRIX_HEIGHT;
         static constexpr uint16_t kFrameIntervalMs = 1000 / 60;
         static constexpr uint16_t kTransitionMs = 300;
+        // What the status pixel is shown at when the lamp is dark.
         static constexpr uint8_t kStatusMinBrightness = 24;
         // Holding the pad sweeps 0→100 in about three seconds.
         static constexpr uint16_t kHoldStepMs = 30;
@@ -107,28 +144,37 @@ namespace app
 
         // The active effect is built here, never on the heap.
         alignas(8) uint8_t arena_[EFFECT_ARENA_SIZE] = {};
-        core::Effect* effect_ = nullptr;
-        core::EffectInfo* info_ = nullptr;
-        core::EffectInfo* pending_ = nullptr;
+        // --- written by the setters, read by render() ---
+        // load/store only - see Mailbox.h
+        std::atomic<bool> wantOn_{true};
+        std::atomic<core::EffectInfo*> wantEffect_{nullptr};
+        std::atomic<uint8_t> brightnessScaled_{0}; // both set by begin(), together
+        std::atomic<Status> status_{Status::Ok};
+        uint8_t brightnessPercent_ = 0;
         uint16_t effectIndex_ = 0;
-
-        bool on_ = true;
-        uint8_t brightnessPercent_ = 50;
-        uint8_t brightnessScaled_ = 128;
         uint16_t currentLimitMa_ = LED_CURRENT_LIMIT_MA;
-        Status status_ = Status::Ok;
         bool changed_ = false;
-        bool activated_ = false;
         int8_t holdDirection_ = 1;
         uint32_t lastHoldStepMs_ = 0;
 
+        // --- owned by render() ---
+        // The active effect and its Param list live in the arena and are rebuilt
+        // by activate(); every walk of the list from the network side goes
+        // through forEachParam()/setParam() and holds lock_ meanwhile, so the
+        // rebuild waits for the walk and the walk never sees a half-built list.
+        mutable hal::Lock lock_;
+        core::Effect* effect_ = nullptr;
+        core::EffectInfo* info_ = nullptr;
+        core::EffectInfo* pending_ = nullptr; // activated once the fade-out ends
+        bool litOn_ = true; // what the matrix shows; follows wantOn_ through a fade
         Transition transition_ = Transition::None;
         uint16_t transitionMs_ = 0;
+        std::atomic<bool> activated_{false};
+        std::atomic<uint16_t> fps_{0};
 
         uint32_t lastRenderMs_ = 0;
         uint32_t fpsWindowMs_ = 0;
         uint16_t fpsCounter_ = 0;
-        uint16_t fps_ = 0;
     };
 
     Lamp& lamp();

@@ -1,10 +1,6 @@
 #include "Config.h"
 
-#ifdef ESP32
-#include <WiFi.h>
-#else
-#include <ESP8266WiFi.h>
-#endif
+#include "WiFiHeader.h"
 
 #include "hal/Database.h"
 
@@ -30,11 +26,9 @@ namespace net
         GyverDBFile& db = hal::database();
         db.init(kLampName, "");
         db.init(kPairName, "");
-        String name = db.get(kLampName).toString();
-        name.trim();
+        String name = hal::dbString(kLampName);
         g_lampName = name.length() ? name : defaultName();
-        g_pairName = db.get(kPairName).toString();
-        g_pairName.trim();
+        g_pairName = hal::dbString(kPairName);
     }
 
     const String& lampName()

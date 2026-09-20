@@ -13,3 +13,7 @@ src/sim/page.h
 
 # Local build secrets, see secrets.ini.example
 secrets.ini
+
+# tools/stress output
+__pycache__/
+out/

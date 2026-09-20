@@ -17,7 +17,10 @@ namespace core
         if (percent >= 100) return 255;
         // lroundf, not "+ 0.5 and truncate": the latter rounds incorrectly at the
         // representable edges and is a classic off-by-one source.
-        return uint8_t(lroundf(powf(float(percent) / 100.0f, kGamma) * 255.0f));
+        const uint8_t scaled = uint8_t(lroundf(powf(float(percent) / 100.0f, kGamma) * 255.0f));
+        // The curve rounds 1 % to zero, and zero is "off": the lowest setting
+        // has to stay a visible night light, so it lands on the strip's own minimum.
+        return scaled == 0 ? 1 : scaled;
     }
 
     uint32_t estimateCurrent(const CRGB* pixels, uint16_t count, uint8_t brightness)

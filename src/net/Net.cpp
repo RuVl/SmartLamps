@@ -4,6 +4,7 @@
 
 #include "Config.h"
 #include "Log.h"
+#include "MemLog.h"
 #include "Mqtt.h"
 #include "Ota.h"
 #include "WebUi.h"
@@ -15,13 +16,44 @@ namespace net
     namespace
     {
         constexpr size_t kLogBytes = 1024;
+        constexpr size_t kTopicLogBytes = 320; // four or five lines
         sets::Logger g_log(kLogBytes);
+        sets::Logger g_wifiLog(kTopicLogBytes);
+        sets::Logger g_mqttLog(kTopicLogBytes);
         bool g_logDirty = false;
+
+        // A frame is 16 ms; anything that holds loop() much longer freezes the
+        // matrix. The line lands right after whatever was logged last, which
+        // usually names the culprit. One line per ten seconds is enough.
+        constexpr uint32_t kStallMs = 100;
+        constexpr uint32_t kStallLogGapMs = 10000;
+        uint32_t g_lastLoopMs = 0;
+        uint32_t g_lastStallLogMs = 0;
+
+        void watchStall(uint32_t nowMs)
+        {
+            const uint32_t gap = nowMs - g_lastLoopMs;
+            const bool first = g_lastLoopMs == 0;
+            g_lastLoopMs = nowMs;
+            if (first || gap < kStallMs) return;
+            if (g_lastStallLogMs != 0 && nowMs - g_lastStallLogMs < kStallLogGapMs) return;
+            g_lastStallLogMs = nowMs;
+            logWarn(String(F("цикл стоял ")) + gap + F(" мс"));
+        }
 
         void append(const String& prefix, const String& s)
         {
             g_log.print(prefix);
             g_log.println(s);
+            // Routed by the prefix every line already carries.
+            sets::Logger* topic = nullptr;
+            if (s.startsWith(F("WiFi:")) || s.startsWith(F("OTA:"))) topic = &g_wifiLog;
+            else if (s.startsWith(F("MQTT:"))) topic = &g_mqttLog;
+            if (topic != nullptr)
+            {
+                topic->print(prefix);
+                topic->println(s);
+            }
             Serial.println(s);
             g_logDirty = true;
         }
@@ -46,6 +78,8 @@ namespace net
     }
 
     sets::Logger& log() { return g_log; }
+    sets::Logger& wifiLog() { return g_wifiLog; }
+    sets::Logger& mqttLog() { return g_mqttLog; }
     void logInfo(const String& s) { append(sets::Logger::info(), s); }
     void logWarn(const String& s) { append(sets::Logger::warn(), s); }
     void logError(const String& s) { append(sets::Logger::error(), s); }
@@ -65,12 +99,14 @@ namespace net
 
     void tick(uint32_t nowMs)
     {
+        watchStall(nowMs);
         wifi::tick();
         web::tick();
         mqtt::tick(nowMs);
         ota::tick();
 
         updateStatus();
+        memlog::tick(nowMs);
 
         // The panel is not pushed to: its widgets are bound to the database and
         // Settings syncs them itself. MQTT is the only subscriber to changes.
