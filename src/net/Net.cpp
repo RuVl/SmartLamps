@@ -16,7 +16,10 @@ namespace net
     namespace
     {
         constexpr size_t kLogBytes = 1024;
+        constexpr size_t kTopicLogBytes = 320; // four or five lines
         sets::Logger g_log(kLogBytes);
+        sets::Logger g_wifiLog(kTopicLogBytes);
+        sets::Logger g_mqttLog(kTopicLogBytes);
         bool g_logDirty = false;
 
         // A frame is 16 ms; anything that holds loop() much longer freezes the
@@ -42,6 +45,15 @@ namespace net
         {
             g_log.print(prefix);
             g_log.println(s);
+            // Routed by the prefix every line already carries.
+            sets::Logger* topic = nullptr;
+            if (s.startsWith(F("WiFi:")) || s.startsWith(F("OTA:"))) topic = &g_wifiLog;
+            else if (s.startsWith(F("MQTT:"))) topic = &g_mqttLog;
+            if (topic != nullptr)
+            {
+                topic->print(prefix);
+                topic->println(s);
+            }
             Serial.println(s);
             g_logDirty = true;
         }
@@ -66,6 +78,8 @@ namespace net
     }
 
     sets::Logger& log() { return g_log; }
+    sets::Logger& wifiLog() { return g_wifiLog; }
+    sets::Logger& mqttLog() { return g_mqttLog; }
     void logInfo(const String& s) { append(sets::Logger::info(), s); }
     void logWarn(const String& s) { append(sets::Logger::warn(), s); }
     void logError(const String& s) { append(sets::Logger::error(), s); }

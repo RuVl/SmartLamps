@@ -88,19 +88,24 @@ def effects(root):
 def page_model(root):
     net_cpp = open(os.path.join(root, "src", "net", "Net.cpp"), encoding="utf-8").read()
     log_bytes = int(re.search(r"kLogBytes\s*=\s*(\d+)", net_cpp).group(1))
+    topic_bytes = int(re.search(r"kTopicLogBytes\s*=\s*(\d+)", net_cpp).group(1))
     webui = open(os.path.join(root, "src", "net", "WebUi.cpp"), encoding="utf-8").read()
     webui = re.sub(r"//[^\n]*", "", webui)  # comments mention b.Log() too
+    # Every Log widget carries its whole buffer, in the page and in each push.
     log_widgets = len(re.findall(r"\bb\.Log\(", webui))
-    push_log_updates = len(re.findall(r"\.update\(\w+,\s*log\(\)\)", webui))
+    log_total = (len(re.findall(r"\bb\.Log\(\w+,\s*log\(\)", webui)) * log_bytes
+                 + len(re.findall(r"\bb\.Log\(\w+,\s*(?:wifi|mqtt)Log\(\)", webui)) * topic_bytes)
+    push_log_total = (len(re.findall(r"\.update\(\w+,\s*log\(\)\)", webui)) * log_bytes
+                      + len(re.findall(r"\.update\(\w+,\s*(?:wifi|mqtt)Log\(\)\)", webui)) * topic_bytes)
     fx = effects(root)
     options = B(";".join(fx))  # the effect Select
     per_effect = {}
     for name, params in fx.items():
         widgets = sum(48 + B(label) + B(opts) for label, opts in params)
-        per_effect[name] = PAGE_FIXED + options + 120 + widgets + log_widgets * (log_bytes + 16)
+        per_effect[name] = PAGE_FIXED + options + 120 + widgets + log_total + log_widgets * 16
     worst = max(per_effect.items(), key=lambda kv: kv[1])
     # pushLog: journal + 2 status strings + 2 LEDs, then a copy in the WS queue
-    push_packet = 24 + push_log_updates * (log_bytes + 16) + 2 * 80 + 2 * 12
+    push_packet = 24 + push_log_total + 3 * 16 + 2 * 80 + 2 * 12
     return log_bytes, log_widgets, per_effect, worst, push_packet
 
 

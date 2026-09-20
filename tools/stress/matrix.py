@@ -2,9 +2,9 @@
 """Stress matrix against the lamp's Settings panel (WS + the static page) and MQTT.
 uv run --quiet --with websockets --with paho-mqtt matrix.py <case> [<case>...]
 Cases: load sliders fastsliders fastfx power twin mqttburst both logspam spamlong soak
-       static browser pair notest testonly konf one mem
+       static browser brightness pair notest testonly konf one mem
 Env: LAMP, NAME, BROKER, PASS, OUT (csv prefix), NOMQTT=1, PAIR, REPS, EFFECT."""
-import asyncio, os, re, struct, sys, time, threading
+import asyncio, http.client, os, re, struct, sys, time, threading
 import websockets
 import paho.mqtt.client as mqtt
 
@@ -173,14 +173,17 @@ async def c_soak(p, minutes=30):
         await p.mem("soak", f"min{i+1}")
     stop.set(); await t
 
-async def fetch(path):
-    """One GET like a browser does it: a fresh connection, read to the end."""
-    r, w = await asyncio.wait_for(asyncio.open_connection(LAMP, 80), 5)
-    w.write(f"GET {path} HTTP/1.1\r\nHost: {LAMP}\r\nAccept-Encoding: gzip\r\nConnection: close\r\n\r\n".encode())
-    await w.drain()
-    body = await asyncio.wait_for(r.read(), 15)
-    w.close()
-    return len(body)
+def get(path):
+    """One GET like a browser does it: a fresh connection, gzip accepted,
+    chunked or Content-Length - http.client sorts that out."""
+    c = http.client.HTTPConnection(LAMP, 80, timeout=15)
+    try:
+        c.request("GET", path, headers={"Accept-Encoding": "gzip"})
+        return len(c.getresponse().read())
+    finally:
+        c.close()
+
+async def fetch(path): return await asyncio.to_thread(get, path)
 
 async def open_panel():
     """The four requests a browser fires when the panel is opened, in parallel -
@@ -217,6 +220,19 @@ async def c_browser(p, rounds=3):
     finally:
         stop.set(); await t
     await c_static(p, 3)
+
+async def c_brightness(p):
+    """The owner dragging the brightness slider: full sweeps at the browser's
+    rate, then fast, then hard jumps between the ends - on a lit effect."""
+    await p.set("efcx", EFF.index("Огонь")); await asyncio.sleep(0.6); await p.load()
+    for delay, steps, name in ((0.25, 5, "sweep@250ms"), (0.05, 5, "sweep@50ms"), (0.02, 3, "sweep@20ms")):
+        for _ in range(steps):
+            for v in list(range(1, 101, 3)) + list(range(100, 0, -3)):
+                await p.set("brgt", v, timeout=delay)
+        await p.mem("brightness", name)
+    for i in range(200):
+        await p.set("brgt", 100 if i % 2 else 1, timeout=0.05)
+    await p.mem("brightness", "jumps@50ms")
 
 async def c_mem(p): await p.mem("mem", "probe")
 

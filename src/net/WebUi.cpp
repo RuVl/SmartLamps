@@ -139,7 +139,10 @@ namespace net::web
             if (b.Input(kWifiSsid, "Сеть (только 2,4 ГГц)")) trimVal(kWifiSsid);
             if (b.Pass(kWifiPass, "Пароль")) trimVal(kWifiPass);
             b.LED(kIdWifiLed, "Подключено", wifi::connected());
-            b.Label(kIdWifiState, "Состояние", wifi::status());
+            // Paragraph, not Label: a Label is one line on the right and the
+            // status with an IP, RSSI and a reason does not fit it.
+            b.Paragraph(kIdWifiState, "Состояние", wifi::status());
+            b.Log(kIdWifiLog, wifiLog());
             if (b.Button("Переподключить")) g_pending = Pending::WifiReconnect;
         }
 
@@ -151,7 +154,8 @@ namespace net::web
             if (b.Input(kMqttUser, "Пользователь")) trimVal(kMqttUser);
             if (b.Pass(kMqttPass, "Пароль")) trimVal(kMqttPass);
             b.LED(kIdMqttLed, "Подключено", mqtt::connected());
-            b.Label(kIdMqttState, "Состояние", mqtt::status());
+            b.Paragraph(kIdMqttState, "Состояние", mqtt::status());
+            b.Log(kIdMqttLog, mqttLog());
             if (b.Button("Переподключить")) g_pending = Pending::MqttReconnect;
         }
 
@@ -170,7 +174,7 @@ namespace net::web
             info += F(" · ");
             info += app::lamp().fps();
             info += F(" к/с");
-            b.Label(kIdInfo, "Состояние", info);
+            b.Paragraph(kIdInfo, "Состояние", info);
 
             String mem;
             mem += F("свободно ");
@@ -185,11 +189,12 @@ namespace net::web
 #else
             mem += ESP.getMaxAllocHeap();
 #endif
-            b.Label(kIdMem, "Память, байт", mem);
+            b.Paragraph(kIdMem, "Память, байт", mem);
 
             if (b.Button("Применить имя и перезагрузить")) g_pending = Pending::Restart;
-            // Keep this the only b.Log(): each copy is ~1 KB in the page and in
-            // every pushLog() packet - see docs/memory-esp8266.md.
+            // The full journal lives here only; the WiFi and MQTT pages get
+            // their own short ones - every Log widget is its buffer's size in
+            // the page and in each pushLog() packet, see docs/memory-esp8266.md.
             b.Log(kIdLog, log());
             memlog::sampleStack();
         }
@@ -262,6 +267,8 @@ namespace net::web
         // 1 KB String copy on the heap for every push.
         settings.updater()
             .update(kIdLog, log())
+            .update(kIdWifiLog, wifiLog())
+            .update(kIdMqttLog, mqttLog())
             .update(kIdWifiState, wifi::status())
             .update(kIdMqttState, mqtt::status())
             .update(kIdWifiLed, wifi::connected())

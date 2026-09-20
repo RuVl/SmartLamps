@@ -30,6 +30,8 @@ namespace net
     constexpr size_t kIdInfo = "ui_info"_h;
     constexpr size_t kIdMem = "ui_mem"_h;
     constexpr size_t kIdLog = "ui_log"_h;
+    constexpr size_t kIdWifiLog = "ui_wifi_log"_h;
+    constexpr size_t kIdMqttLog = "ui_mqtt_log"_h;
 
     // "lamp-a4f2" from the MAC until the owner names it in the panel.
     const String& lampName();
