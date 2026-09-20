@@ -15,4 +15,5 @@ src/sim/page.h
 secrets.ini
 
 # tools/stress output
+__pycache__/
 out/
