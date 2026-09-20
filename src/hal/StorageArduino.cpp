@@ -22,9 +22,26 @@ namespace hal
             void begin() override
             {
 #ifdef ESP32
-                LittleFS.begin(true); // format on first boot
+                mounted_ = LittleFS.begin(true); // format on first boot
 #else
-                LittleFS.begin();
+                mounted_ = LittleFS.begin();
+#endif
+                if (!mounted_) {
+                    // Say it once, loudly. Without this the only symptom is
+                    // "File system is not mounted" from vfs_api every time
+                    // the deferred write fires — ten seconds apart, forever.
+                    Serial.println(F("storage: LittleFS mount FAILED — settings will not persist"));
+                    return;
+                }
+#ifdef ESP32
+                Serial.printf("storage: LittleFS %u/%u KB used\n",
+                              unsigned(LittleFS.usedBytes() / 1024),
+                              unsigned(LittleFS.totalBytes() / 1024));
+#else
+                FSInfo fi;
+                LittleFS.info(fi);
+                Serial.printf("storage: LittleFS %u/%u KB used\n",
+                              unsigned(fi.usedBytes / 1024), unsigned(fi.totalBytes / 1024));
 #endif
                 db.begin();
                 db.setTimeout(kWriteDelayMs);
@@ -48,13 +65,16 @@ namespace hal
 
             void setString(uint32_t key, const char* value) override { db.set(key, value); }
 
-            void tick() override { db.tick(); }
-            void flush() override { db.update(); }
+            // With no filesystem the database still works in RAM — the lamp
+            // runs on defaults — but nothing is written, so nothing spams.
+            void tick() override { if (mounted_) db.tick(); }
+            void flush() override { if (mounted_) db.update(); }
 
         private:
             // Ten seconds of quiet before anything reaches flash.
             static constexpr uint16_t kWriteDelayMs = 10000;
 
+            bool mounted_ = false;
             String scratch_;
         };
     }
