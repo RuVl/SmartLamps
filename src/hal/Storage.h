@@ -1,7 +1,7 @@
 #pragma once
 // Persistent settings.
 //
-// Backed by GyverDB over LittleFS on both boards. Writes are deferred: the
+// Backed by GyverDB over LittleFS. Writes are deferred: the
 // value changes in memory immediately and reaches flash once nothing has
 // moved for a while, so dragging a slider costs one erase cycle, not fifty.
 

@@ -1,11 +1,11 @@
-# Post-build heap budget for lamp B (env:d1_mini and everything that extends it).
+# Post-build heap budget for the lamp (env:d1_mini and everything that extends it).
 #
 # The ESP8266 has 80 KB of DRAM and no MMU. What the linker reports as "RAM" is
 # only the static part; the panel, WiFi and MQTT take the rest at run time, and
 # a build that links fine can still be one page load away from a crash. This
 # script adds the run-time model to the exact static numbers from the ELF and
 # refuses the build when the predicted margin is gone. The model and every
-# measured constant are explained in docs/memory-esp8266.md - update the
+# measured constant are explained in docs/memory.md - update the
 # constants there and here together when the firmware changes shape.
 #
 # Three kinds of numbers, marked in the output:
@@ -22,7 +22,7 @@ import subprocess
 
 DRAM_END = 0x3FFFC000  # end of the 80 KB user DRAM; the sys stack lives above
 
-# --- measured on lamp B, 2026-09-19, env d1_mini_mem, WS client + MQTT connected ---
+# --- measured on the lamp, 2026-09-19, env d1_mini_mem, WS client + MQTT connected ---
 # Heap taken at idle by everything that is not static: WiFi + lwIP (AP+STA,
 # DHCP server), the open WebSocket, the MQTT session, LittleFS, GyverDB,
 # NeoPixelBus buffers and the Logger. Measured as heap0 - ESP.getFreeHeap() at
@@ -146,7 +146,7 @@ def check(source, target, env):
 
     kind = "measured" if TRANSIENT_PEAK_MEASURED else "model"
     print("")
-    print("ESP8266 heap budget (docs/memory-esp8266.md)")
+    print("ESP8266 heap budget (docs/memory.md)")
     print("  heap at boot            %6d  exact   DRAM_END - _heap_start" % heap0)
     print("  idle, everything up    -%6d  measured 2026-09-19 (includes NeoPixelBus %d B, %d-step)" % (IDLE_TAKEN, neo, steps))
     print("  = free at idle          %6d" % free_idle)

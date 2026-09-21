@@ -1,4 +1,4 @@
-// Touch pad, shared by both boards: ttp223 plus EncButton for the gestures.
+// Touch pad: ttp223 plus EncButton for the gestures.
 //
 // The pad holds its output high while a finger is on it, so hold and
 // multi-click are both available. Gesture meanings live in app/, not here.

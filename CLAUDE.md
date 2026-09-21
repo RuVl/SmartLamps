@@ -4,20 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-WS2812B 16x16 LED matrix lamp firmware, PlatformIO + Arduino. One source tree builds for
-two boards: ESP32-S3 (lamp A) and ESP8266 (lamp B). Two lamps talk over MQTT.
+WS2812B 16x16 LED matrix lamp firmware for a WeMos D1 mini (ESP8266), PlatformIO +
+Arduino. The lamp can be paired with another lamp over MQTT; the partner's hardware and
+firmware are not this repository's concern.
 
 Branch `dev` is the v2 rebuild; `main` holds the previous, superseded implementation.
 
 ## Commands
 
 ```bash
-pio run -e esp32s3          # lamp A (default env)
-pio run -e d1_mini          # lamp B
+pio run                     # firmware (env d1_mini)
+pio run -e d1_mini_mem      # the same with heap telemetry, see docs/memory.md
 pio test -e native          # core tests on the host - run these before touching core/
 pio run -e sim && .pio/build/sim/program   # effect preview at http://localhost:8266
-pio run -e esp32s3 -t upload
-pio device monitor -b 115200   # 74880 on d1_mini
+pio run -t upload
+pio device monitor -b 74880
 ```
 
 Host test dirs must be named `test_*` or PlatformIO ignores them.
@@ -31,8 +32,9 @@ Read `docs/architecture.md` first. The rules that matter when editing:
 
 - **Dependency direction is one-way.** `core/` and `effects/` know nothing about the
   network, the database, the LED driver or Arduino - no `String`, no `millis()`, no
-  `Serial`. That is what keeps effects testable on the host and identical on both boards.
-  Board-specific code lives in `src/hal/<board>/` behind the interfaces in `src/hal/`.
+  `Serial`. That is what keeps effects testable on the host and identical in the
+  simulator. Board code lives in `src/hal/*.cpp` behind the interfaces in `src/hal/*.h`;
+  the simulator's implementations of the same interfaces are in `src/sim/hal/`.
 - **Effects are self-registering.** `REGISTER_EFFECT` at the bottom of an effect's .cpp
   is the only place it is mentioned. There is no enum, no name list, no switch. Adding an
   effect touches exactly one file in `src/effects/`.
@@ -48,7 +50,7 @@ Read `docs/architecture.md` first. The rules that matter when editing:
 - **Brightness, gamma and the current limit belong to PostFX**, not to effects.
 - **Effect state is fixed-size.** Particles, trails, heat maps are plain arrays sized at
   compile time; the whole effect must fit the arena, and it must not allocate in `render`.
-- **Nothing heavy inside a panel callback on ESP8266.** `sets::Builder` callbacks run in the
+- **Nothing heavy inside a panel callback.** `sets::Builder` callbacks run in the
   SDK sys context (5 KB of stack, and only because of `disable_extra4k_at_link_time`): no flash
   writes, no `WiFi.mode`, no restart - record a `Pending` request and act from `tick()`.
   Unsolicited WebSocket pushes from `loop()` go through the throttle in `WebUi.cpp`.
@@ -58,17 +60,14 @@ Read `docs/architecture.md` first. The rules that matter when editing:
 
 ## Hardware constraints worth knowing
 
-- ESP8266 drives the strip from I2S DMA on `GPIO3` (NeoPixelBus), not from FastLED's
+- The strip is driven from I2S DMA on `GPIO3` (NeoPixelBus), not from FastLED's
   bit-bang - bit-banging blocks interrupts for ~7.7 ms per frame and tears async HTTP
-  responses apart. See `docs/adr/0003-hardware-led-transport.md`.
-- That also means the single I2S peripheral on ESP8266 is taken: no microphone there.
-- The stock `esp32-s3-devkitc-1` board definition is the N8 variant with **no PSRAM**, so
-  `platformio.ini` overrides `board_build.arduino.memory_type = qio_opi` along with the
-  flash size. Miss `memory_type` and the build silently links the `qio_qspi` SDK, leaving
-  PSRAM unavailable and `ESP.getPsramSize()` at 0 on a perfectly good N16R8. Verify with
-  `pio run -e esp32s3 -t envdump | tr ',' '\n' | grep -oE '(qio|dio|opi)_(opi|qspi)'`.
-- The `model` partition in `partitions/esp32s3.csv` is reserved for esp-sr wake word
-  models. Do not repurpose it.
+  responses apart. See `docs/adr/0003-hardware-led-transport.md`. FastLED stays for
+  colour math only.
+- That also means the single I2S peripheral is taken: no microphone, no sound-reactive
+  effects.
+- ~40 KB of free heap, shared with the network stack. `tools/memory_budget.py` runs
+  after every build and fails it without heap margin; see `docs/memory.md`.
 
 ## Conventions
 

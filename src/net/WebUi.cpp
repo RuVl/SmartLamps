@@ -194,7 +194,7 @@ namespace net::web
             if (b.Button("Применить имя и перезагрузить")) g_pending = Pending::Restart;
             // The full journal lives here only; the WiFi and MQTT pages get
             // their own short ones - every Log widget is its buffer's size in
-            // the page and in each pushLog() packet, see docs/memory-esp8266.md.
+            // the page and in each pushLog() packet, see docs/memory.md.
             b.Log(kIdLog, log());
             memlog::sampleStack();
         }
