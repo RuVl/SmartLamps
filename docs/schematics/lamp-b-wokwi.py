@@ -38,37 +38,24 @@ s.add(f"<circle cx='{TX + 40}' cy='{TY + 42}' r='22' fill='#e03131' stroke='#a61
 s.text(TX + 55, TY + 76, 'ttp223', size=11, weight='bold', color='white', anchor='middle', layer='parts')
 s.header(TX + 110, TY + 20, ['VCC', 'I/O', 'GND'], 25, True, 'left', bold={'VCC', 'I/O', 'GND'}, prefix='t.')
 
-# --- level-shifting pixel ------------------------------------------------------
-PX, PY = 700, 372   # breakout board 100x100, LED in the middle
-s.pcb(PX, PY, 100, 100, '#f8f9fa', rx=6)
-s.add(f"<rect x='{PX + 25}' y='{PY + 25}' width='50' height='50' rx='4' fill='#e9ecef' stroke='#adb5bd'/>"
-      f"<circle cx='{PX + 50}' cy='{PY + 50}' r='16' fill='#fff3bf' stroke='#f59f00'/>"
-      f"<circle cx='{PX + 50}' cy='{PY + 50}' r='4' fill='#495057'/>")
-for name, (x, y), (lx, ly, anc) in [
-        ('DI', (PX, PY + 50), (PX + 8, PY + 45, 'start')),
-        ('DO', (PX + 100, PY + 50), (PX + 92, PY + 45, 'end')),
-        ('VDD', (PX + 25, PY + 100), (PX + 25, PY + 92, 'middle')),
-        ('GND', (PX + 75, PY + 100), (PX + 75, PY + 92, 'middle'))]:
-    s.add(f"<rect x='{x - 6}' y='{y - 6}' width='12' height='12' rx='2' fill='#e6c157' stroke='#8a6d1f'/>")
-    s.pin('p.' + name, x, y)
-    s.text(lx, ly, name, size=9, weight='bold', color='#343a40', anchor=anc, layer='parts')
-s.text(PX + 50, PY - 12, 'жертвенный WS2812B', size=12, weight='bold', anchor='middle')
-
-# R1 between RX and DI: RX → right → down to the DI row → resistor → DI
+# --- level-shifting pixel: DIN in line with RX -----------------------------------
 rx = P['b.RX']
-s.wire([rx, (rx[0] + 60, rx[1]), (rx[0] + 60, PY + 50), (560, PY + 50)], GRN)
-s.resistor((560, PY + 50), (660, PY + 50), 'R1 100 Ω')
-s.wire([(660, PY + 50), P['p.DI']], GRN)
+PX, PY = 760, rx[1] - 18
+s.ws2812b(PX, PY)
+s.text(PX + 32, PY - 22, 'жертвенный WS2812B', size=12, weight='bold', anchor='middle')
+din, gnd, vdd, dout = P['p.DIN'], P['p.GND'], P['p.VDD'], P['p.DOUT']
 
-# two 1N4007 below VDD, anode towards the supply
-vdd, gnd = P['p.VDD'], P['p.GND']
-s.diode((vdd[0], vdd[1] + 118), (vdd[0], vdd[1] + 28), 'D2 1N4007', label_side='left')
-s.diode((vdd[0], vdd[1] + 218), (vdd[0], vdd[1] + 128), 'D1 1N4007', label_side='left')
-s.wire([vdd, (vdd[0], vdd[1] + 28)], RED)
-s.wire([(vdd[0], vdd[1] + 118), (vdd[0], vdd[1] + 128)], RED)
-s.cap_ceramic((vdd[0] + gnd[0]) / 2, vdd[1] + 14, 'C4 100 nF', lead_to=(vdd[0], gnd[0]), label_at=(gnd[0] + 12, vdd[1] + 18))
-s.dot(vdd[0], vdd[1] + 14, RED)
-s.dot(gnd[0], vdd[1] + 14, BLK)
+# R1 between RX and DIN
+s.wire([rx, (580, rx[1])], GRN)
+s.resistor((580, rx[1]), (680, rx[1]), 'R1 100 Ω')
+s.wire([(680, rx[1]), din], GRN)
+
+# VDD through one 1N4007 (anode towards the supply); the red wire goes right,
+# crosses DOUT once and drops to the diode
+s.wire([vdd, (vdd[0] + 60, vdd[1]), (vdd[0] + 60, vdd[1] + 60)], RED)
+s.diode((vdd[0] + 60, vdd[1] + 150), (vdd[0] + 60, vdd[1] + 60), 'D1 1N4007')
+GX = gnd[0] - 40          # the pixel's GND wire runs down here
+s.wire([gnd, (GX, gnd[1])], BLK)
 
 # --- matrix -------------------------------------------------------------------
 MX, MY, CELL = 1060, 120, 30
@@ -79,18 +66,18 @@ for r in range(16):
         s.add(f"<rect x='{x}' y='{y}' width='18' height='18' rx='2' fill='#f1f3f5'/>"
               f"<circle cx='{x + 9}' cy='{y + 9}' r='4' fill='#fff3bf'/>")
 s.text(MX + 8 * CELL, MY - 12, 'Матрица WS2812B 16×16, 256 LED', size=12, weight='bold', anchor='middle')
-# input pads on the left edge (DIN in line with the pixel's DO), power pads below
-for name, y in [('DIN', PY + 50), ('GND', 470 + 30), ('5V', 500 + 30)]:
-    s.add(f"<rect x='{MX - 8}' y='{y - 7}' width='16' height='14' rx='2' fill='#e6c157' stroke='#8a6d1f'/>")
-    s.pin('m.' + name, MX - 8, y)
-    s.text(MX - 18, y - 7, name, size=10, weight='bold', color='#343a40', anchor='end')
-for name, y in [('GND', 500), ('5V', 530)]:
-    s.add(f"<rect x='{MX + 16 * CELL - 8}' y='{y - 7}' width='16' height='14' rx='2' fill='#e6c157' stroke='#8a6d1f'/>")
-    s.pin('m2.' + name, MX + 16 * CELL + 8, y)
-    s.text(MX + 16 * CELL + 18, y - 7, name, size=10, weight='bold', color='#343a40')
-s.text(MX - 18, 468, 'вход', size=10, color='#495057', anchor='end')
-s.text(MX + 16 * CELL + 18, 468, 'дальний край', size=10, color='#495057')
-s.wire([P['p.DO'], P['m.DIN']], GRN)
+# DIN pad on the left edge in line with DOUT; power pads in the middle of the bottom edge
+s.add(f"<rect x='{MX - 8}' y='{dout[1] - 7}' width='16' height='14' rx='2' fill='#e6c157' stroke='#8a6d1f'/>")
+s.pin('m.DIN', MX - 8, dout[1])
+s.text(MX - 18, dout[1] - 7, 'DIN', size=10, weight='bold', color='#343a40', anchor='end')
+MB = MY + 16 * CELL
+for name, x in [('5V', MX + 8 * CELL - 35), ('GND', MX + 8 * CELL + 35)]:
+    s.add(f"<rect x='{x - 7}' y='{MB - 8}' width='14' height='16' rx='2' fill='#e6c157' stroke='#8a6d1f'/>")
+    s.pin('m.' + name, x, MB + 8)
+    s.text(x + (-12 if name == '5V' else 12), MB + 22, name, size=10, weight='bold', color='#343a40',
+           anchor='end' if name == '5V' else 'start')
+s.text(MX + 8 * CELL, MB + 42, 'питание в центр матрицы', size=10, color='#495057', anchor='middle')
+s.wire([dout, P['m.DIN']], GRN)
 
 # --- power supply -----------------------------------------------------------------
 SX, SY = 60, 800
@@ -99,7 +86,6 @@ s.add(f"<rect x='{SX}' y='{SY}' width='170' height='110' rx='10' fill='#222'/>"
       f"<text x='{SX + 85}' y='{SY + 50}' font-size='13' fill='#ddd' text-anchor='middle' font-family='sans-serif' font-weight='bold'>5 В / 4 А</text>"
       f"<text x='{SX + 85}' y='{SY + 70}' font-size='10' fill='#aaa' text-anchor='middle' font-family='sans-serif'>на холостом ходу 5,43 В</text>")
 s.wire([(SX + 170, SY + 55), (SX + 210, SY + 55)], '#222', width=5)
-# screw terminal block, 3 pairs: one pair of wires per load
 TBX, TBY = SX + 210, SY - 10
 s.add(f"<rect x='{TBX}' y='{TBY}' width='40' height='140' rx='4' fill='#2b8a3e' stroke='#1e6b30'/>")
 rows = {}
@@ -111,47 +97,45 @@ for i, name in enumerate(['+', '−', '+', '−', '+', '−']):
     rows[i] = (TBX + 40, y)
 s.text(TBX + 20, TBY + 156, 'клеммы БП', size=10, color='#495057', anchor='middle')
 
-# pair 1 → board (near channels x=560/590)
+# pair 1 → board; C2 lies between the two wires
 b5v, bgnd = P['b.5V'], P['b.GND']
-s.wire([rows[0], (560, rows[0][1]), (560, b5v[1]), b5v], RED)
-s.wire([rows[1], (600, rows[1][1]), (600, bgnd[1]), bgnd], BLK)
-# pair 2 → pixel
-s.wire([rows[2], (vdd[0], rows[2][1]), (vdd[0], vdd[1] + 218)], RED)
-s.wire([rows[3], (gnd[0], rows[3][1]), gnd], BLK)
-# pair 3 → matrix input, then on to the far end
-m5v, mgnd, f5v, fgnd = P['m.5V'], P['m.GND'], P['m2.5V'], P['m2.GND']
-s.wire([rows[4], (990, rows[4][1]), (990, m5v[1]), m5v], RED)
-s.wire([rows[5], (950, rows[5][1]), (950, mgnd[1]), mgnd], BLK)
-s.wire([(990, rows[4][1]), (MX + 16 * CELL + 60, rows[4][1]), (MX + 16 * CELL + 60, f5v[1]), f5v], RED)
-s.wire([(950, rows[5][1]), (MX + 16 * CELL + 90, rows[5][1]), (MX + 16 * CELL + 90, fgnd[1]), fgnd], BLK)
-s.dot(990, rows[4][1], RED)
-s.dot(950, rows[5][1], BLK)
-
-# electrolytics: C2 at the board's 5 V, C1 at the matrix input
-# Electrolytics sit between the two wires of their pair: + lead left to the red wire,
-# − lead right to the black one, so nothing crosses.
-c2p, c2m = s.cap_electrolytic(580, 690, 60, 'C2 470 µF', label_at=(612, 724))
-s.wire([c2p, (c2p[0], c2p[1] + 16), (560, c2p[1] + 16)], RED); s.dot(560, c2p[1] + 16, RED)
-s.wire([c2m, (c2m[0], c2m[1] + 32), (600, c2m[1] + 32)], BLK); s.dot(600, c2m[1] + 32, BLK)
-c1p, c1m = s.cap_electrolytic(970, 640, 90, 'C1 1000 µF', label_at=(1002, 689))
-s.wire([c1p, (c1p[0], c1p[1] + 16), (990, c1p[1] + 16)], RED); s.dot(990, c1p[1] + 16, RED)
-s.wire([c1m, (c1m[0], c1m[1] + 32), (950, c1m[1] + 32)], BLK); s.dot(950, c1m[1] + 32, BLK)
+CH1, CH2 = 560, 630
+s.wire([rows[0], (CH1, rows[0][1]), (CH1, b5v[1]), b5v], RED)
+s.wire([rows[1], (CH2, rows[1][1]), (CH2, bgnd[1]), bgnd], BLK)
+s.cap_electrolytic_h(CH1, CH2, 720, 'C2 470 µF')
+s.dot(CH1, 720, RED); s.dot(CH2, 720, BLK)
+# pair 2 → pixel; C4 lies between the two wires below the diode
+DX = vdd[0] + 60
+s.wire([rows[2], (DX, rows[2][1]), (DX, vdd[1] + 150)], RED)
+s.wire([rows[3], (GX, rows[3][1]), (GX, gnd[1])], BLK)
+CY = vdd[1] + 190
+s.cap_ceramic((GX + DX) / 2, CY, 'C4 100 nF', lead_to=(GX, DX), label_at=((GX + DX) / 2 - 30, CY - 18))
+s.dot(GX, CY, BLK); s.dot(DX, CY, RED)
+# pair 3 → matrix centre; C1 lies between the two wires
+m5v, mgnd = P['m.5V'], P['m.GND']
+s.wire([rows[4], (m5v[0], rows[4][1]), m5v], RED)
+s.wire([rows[5], (mgnd[0], rows[5][1]), mgnd], BLK)
+s.cap_electrolytic_h(m5v[0], mgnd[0], 720, 'C1 1000 µF', label_dy=30)
+s.dot(m5v[0], 720, RED); s.dot(mgnd[0], 720, BLK)
 
 # --- touch pad wires ----------------------------------------------------------
 tv, ti, tg = P['t.VCC'], P['t.I/O'], P['t.GND']
 b3 = P['b.3V3']
 s.wire([tv, (230, tv[1]), (230, b3[1]), b3], RED)
-s.wire([ti, (200, ti[1]), (200, 340), (620, 340), (620, P['b.D2'][1]), P['b.D2']], BLU)
+s.wire([ti, (200, ti[1]), (200, 340), (700, 340), (700, P['b.D2'][1]), P['b.D2']], BLU)
 s.wire([tg, (260, tg[1]), (260, rows[1][1]), rows[1]], BLK)
 
 # --- notes ------------------------------------------------------------------------
 s.note(430, 960, [
     'Три отдельные пары проводов от клемм БП: к плате, к пикселю, к матрице. Земли сходятся только на клеммах.',
-    'Провод не тоньше 0,5 мм², до метра. Питание в матрицу заведено с двух концов: с входа и с дальнего края.'])
-s.note(1100, 660, [
-    'Жертвенный пиксель: два 1N4007 оставляют ему около 4,2 В, порог DI падает до 2,9 В,',
-    'и 3,2 В с GPIO3 читаются уверенно. DO перевыдаёт данные с размахом 4,2 В.',
-    'В прошивке под него -DLED_LEAD_PIXELS=1: пиксель не часть картинки, всегда чёрный.'])
+    'Провод не тоньше 0,5 мм², до метра. Питание матрицы заведено на её центральные площадки, не в угол.'])
+s.note(1370, 800, [
+    'Жертвенный пиксель: один 1N4007 в питании',
+    'снижает его VDD примерно на 0,7 В, и 3,2 В',
+    'с GPIO3 читаются уверенно. DOUT перевыдаёт',
+    'данные с полным размахом. В прошивке под него',
+    '-DLED_LEAD_PIXELS=1: пиксель не часть картинки,',
+    'всегда чёрный.'])
 s.note(60, 560, ['Кнопка на лампе B пока', 'заглушена в прошивке', '(LAMP_BUTTON_DISABLED).'], size=11)
 
 s.save(OUT, 'Лампа B: подключение')

@@ -102,7 +102,7 @@ class Scene:
         for off, c in bands:
             g.append(f"<rect x='{-bw / 2 + off}' y='{-bh / 2}' width='5' height='{bh}' fill='{c}'/>")
         g.append('</g>')
-        self.add(''.join(g))
+        self.add(''.join(g), 'over')
         # Label beside the body, on the side away from the wire direction.
         vertical = abs(x2 - x1) < abs(y2 - y1)
         if vertical and label_side == 'left':
@@ -128,6 +128,34 @@ class Scene:
         else:  # 'top': for a cap squeezed between the two wires of a pair
             self.text(x, y - 8, label, size=11, anchor='middle')
         return (x - 8, y + h), (x + 8, y + h)
+
+    def cap_electrolytic_h(self, x1, x2, y, label, label_dy=-18):
+        """Can lying between two vertical wires: + lead to x1 (left), − lead to x2 (right)."""
+        L, w = 44, 26
+        cx = (x1 + x2) / 2
+        self.wire([(x1, y), (x2, y)], '#8a8f98', width=2.5)
+        self.add(f"<rect x='{cx - L / 2}' y='{y - w / 2}' width='{L}' height='{w}' rx='5' fill='#1f2d5c'/>"
+                 f"<rect x='{cx + L / 2 - 8}' y='{y - w / 2}' width='8' height='{w}' rx='3' fill='#cfd5e3'/>"
+                 f"<rect x='{cx - L / 2}' y='{y - w / 2}' width='6' height='{w}' rx='3' fill='#9aa5bd'/>"
+                 f"<text x='{cx + L / 2 - 4}' y='{y + 4}' font-size='11' fill='#1f2d5c' text-anchor='middle' {FONT}>−</text>", 'over')
+        self.text(cx, y + label_dy, label, size=11, anchor='middle')
+
+    def ws2812b(self, x, y, prefix='p.', size=64):
+        """5050 WS2812B, top view. The chamfered corner is GND; DIN is next to it on the
+        same side, VDD is diagonally opposite GND, DOUT is next to VDD.
+        Here: GND bottom-left (chamfer), DIN top-left, VDD top-right, DOUT bottom-right."""
+        c = 12  # chamfer
+        self.add(f"<path d='M{x} {y} h{size} v{size} h{-(size - c)} l{-c} {-c} Z' fill='#f4f5f7' stroke='#b8bfc8' stroke-width='1.5'/>"
+                 f"<rect x='{x + 12}' y='{y + 12}' width='{size - 24}' height='{size - 24}' rx='3' fill='#e9ecef'/>"
+                 f"<circle cx='{x + size / 2}' cy='{y + size / 2}' r='{size / 2 - 16}' fill='#fff3bf' stroke='#f59f00'/>"
+                 f"<rect x='{x + size / 2 - 5}' y='{y + size / 2 - 5}' width='10' height='10' fill='#495057'/>")
+        pads = {'DIN': (x - 6, y + 18, 'end'), 'GND': (x - 6, y + size - 18, 'end'),
+                'VDD': (x + size + 6, y + 18, 'start'), 'DOUT': (x + size + 6, y + size - 18, 'start')}
+        for name, (px, py, anc) in pads.items():
+            self.add(f"<rect x='{px - 6}' y='{py - 7}' width='12' height='14' rx='1.5' fill='#c9ced6' stroke='#8a8f98'/>")
+            self.pin(prefix + name, px, py)
+            lx = px - 12 if anc == 'end' else px + 12
+            self.text(lx, py - 9, name, size=9, weight='bold', color='#343a40', anchor=anc)
 
     def cap_ceramic(self, x, y, label, lead_to=None, label_at=None):
         """Disc capacitor. lead_to=(xa, xb) draws horizontal leads to those x's."""
