@@ -48,7 +48,8 @@ class Scene:
                  f"stroke-linecap='round' stroke-linejoin='round'/>", 'wires')
 
     def dot(self, x, y, color, r=4.5):
-        self.add(f"<circle cx='{x:.1f}' cy='{y:.1f}' r='{r}' fill='{color}'/>", 'wires')
+        # Junction dots go above every wire halo, whatever the drawing order.
+        self.add(f"<circle cx='{x:.1f}' cy='{y:.1f}' r='{r}' fill='{color}'/>", 'over')
 
     # -- parts ------------------------------------------------------------
     def header(self, x, y, names, pitch, vertical, label_side, bold=(), prefix=''):
