@@ -14,7 +14,7 @@ Branch `dev` is the v2 rebuild; `main` holds the previous, superseded implementa
 ```bash
 pio run -e esp32s3          # lamp A (default env)
 pio run -e d1_mini          # lamp B
-pio test -e native          # core tests on the host — run these before touching core/
+pio test -e native          # core tests on the host - run these before touching core/
 pio run -e sim && .pio/build/sim/program   # effect preview at http://localhost:8266
 pio run -e esp32s3 -t upload
 pio device monitor -b 115200   # 74880 on d1_mini
@@ -30,7 +30,7 @@ build, verify, and say the build is ready. Reading the serial port for logs is f
 Read `docs/architecture.md` first. The rules that matter when editing:
 
 - **Dependency direction is one-way.** `core/` and `effects/` know nothing about the
-  network, the database, the LED driver or Arduino — no `String`, no `millis()`, no
+  network, the database, the LED driver or Arduino - no `String`, no `millis()`, no
   `Serial`. That is what keeps effects testable on the host and identical on both boards.
   Board-specific code lives in `src/hal/<board>/` behind the interfaces in `src/hal/`.
 - **Effects are self-registering.** `REGISTER_EFFECT` at the bottom of an effect's .cpp
@@ -50,7 +50,7 @@ Read `docs/architecture.md` first. The rules that matter when editing:
   compile time; the whole effect must fit the arena, and it must not allocate in `render`.
 - **Nothing heavy inside a panel callback on ESP8266.** `sets::Builder` callbacks run in the
   SDK sys context (5 KB of stack, and only because of `disable_extra4k_at_link_time`): no flash
-  writes, no `WiFi.mode`, no restart — record a `Pending` request and act from `tick()`.
+  writes, no `WiFi.mode`, no restart - record a `Pending` request and act from `tick()`.
   Unsolicited WebSocket pushes from `loop()` go through the throttle in `WebUi.cpp`.
 
 `src/effects/Fire.cpp` is the reference effect and is documented line by line in
@@ -59,7 +59,7 @@ Read `docs/architecture.md` first. The rules that matter when editing:
 ## Hardware constraints worth knowing
 
 - ESP8266 drives the strip from I2S DMA on `GPIO3` (NeoPixelBus), not from FastLED's
-  bit-bang — bit-banging blocks interrupts for ~7.7 ms per frame and tears async HTTP
+  bit-bang - bit-banging blocks interrupts for ~7.7 ms per frame and tears async HTTP
   responses apart. See `docs/adr/0003-hardware-led-transport.md`.
 - That also means the single I2S peripheral on ESP8266 is taken: no microphone there.
 - The stock `esp32-s3-devkitc-1` board definition is the N8 variant with **no PSRAM**, so
