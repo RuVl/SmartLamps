@@ -1,5 +1,5 @@
 # Lamp B (WeMos D1 mini) wiring. Render:
-#   uv run --with schemdraw --with matplotlib python docs/schematics/lamp-b-wiring.py
+#   uv run --with schemdraw --with cairosvg python docs/schematics/lamp-b-wiring.py
 # Writes lamp-b-wiring.svg and .png next to this file.
 
 from pathlib import Path
@@ -9,6 +9,11 @@ import schemdraw.elements as elm
 
 RED, BLK, GRN, BLU = '#c92a2a', '#212529', '#2b8a3e', '#1971c2'
 OUT = Path(__file__).with_suffix('')
+
+# schemdraw's own SVG backend, not matplotlib's: smaller file, real text, and an
+# explicit white background - GitHub's dark theme otherwise shows black on black.
+schemdraw.use('svg')
+schemdraw.config(bgcolor='white')
 
 with schemdraw.Drawing(show=False) as d:
     d.config(unit=2, fontsize=11, font='sans-serif', lw=1.6)
@@ -123,10 +128,23 @@ with schemdraw.Drawing(show=False) as d:
 
     d.add(elm.Label().at((psu.M.x + 1.0, rail_g - 1.9)).label(
         'Три отдельные пары проводов от клемм БП: к матрице, к плате, к пикселю.\n'
-        'Земли сходятся только на клеммах. Провод ≥ 0,5 мм², до метра.',
+        'Земли сходятся только на клеммах. Провод не тоньше 0,5 мм², до метра.',
         fontsize=9, halign='left'))
     d.add(elm.Label().at((mcu['3V3'].x - 0.5, btn.VCC.y + 3.0)).label(
         'Лампа B (ESP8266): схема подключения', fontsize=14, halign='left'))
 
     d.save(str(OUT.with_suffix('.svg')))
-    d.save(str(OUT.with_suffix('.png')), dpi=150)
+
+# A real white <rect> behind the drawing: viewers that drop the root style attribute
+# (GitHub's image proxy among them) would otherwise show the dark theme through.
+import re  # noqa: E402
+
+svg_path = OUT.with_suffix('.svg')
+svg = svg_path.read_text()
+vb = re.search(r'viewBox="([^"]+)"', svg).group(1).split()
+rect = f'<rect x="{vb[0]}" y="{vb[1]}" width="{vb[2]}" height="{vb[3]}" fill="white"/>'
+svg = re.sub(r'(<svg[^>]*>)', lambda m: m.group(1) + rect, svg, count=1)
+svg_path.write_text(svg)
+
+import cairosvg  # noqa: E402  - PNG is a review copy, rendered from the SVG
+cairosvg.svg2png(url=str(OUT.with_suffix('.svg')), write_to=str(OUT.with_suffix('.png')), scale=2)
