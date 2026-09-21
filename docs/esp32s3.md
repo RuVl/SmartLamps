@@ -9,6 +9,11 @@
 pio run -e esp32s3
 ```
 
+![Подключение лампы A](schematics/lamp-a-wokwi.svg)
+
+Лампа A ещё не собрана: картинка — план по этому документу, а не фотография. Скрипт —
+`docs/schematics/lamp-a-wokwi.py`, см. `docs/schematics/README.md`.
+
 ## Состав
 
 | Узел | Что | Примечание |
