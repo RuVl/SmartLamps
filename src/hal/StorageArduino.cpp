@@ -1,4 +1,4 @@
-// Settings, shared by both boards: GyverDB on LittleFS.
+// Settings: GyverDB on LittleFS.
 //
 // Writes are deferred by the database itself; tick() performs them when due.
 // Dragging a brightness slider therefore costs one flash erase, not fifty.
@@ -21,11 +21,7 @@ namespace hal
         public:
             void begin() override
             {
-#ifdef ESP32
-                mounted_ = LittleFS.begin(true); // format on first boot
-#else
                 mounted_ = LittleFS.begin();
-#endif
                 if (!mounted_) {
                     // Say it once, loudly. Without this the only symptom is
                     // "File system is not mounted" from vfs_api every time
@@ -33,16 +29,10 @@ namespace hal
                     Serial.println(F("storage: LittleFS mount FAILED — settings will not persist"));
                     return;
                 }
-#ifdef ESP32
-                Serial.printf("storage: LittleFS %u/%u KB used\n",
-                              unsigned(LittleFS.usedBytes() / 1024),
-                              unsigned(LittleFS.totalBytes() / 1024));
-#else
                 FSInfo fi;
                 LittleFS.info(fi);
                 Serial.printf("storage: LittleFS %u/%u KB used\n",
                               unsigned(fi.usedBytes / 1024), unsigned(fi.totalBytes / 1024));
-#endif
                 db.begin();
                 db.setTimeout(kWriteDelayMs);
             }

@@ -2,11 +2,9 @@
 
 #include <WiFiConnector.h>
 
-#ifndef ESP32
 extern "C" {
 #include <user_interface.h>
 }
-#endif
 
 #include "Config.h"
 #include "Log.h"
@@ -39,19 +37,12 @@ namespace net::wifi
         // the loop() context, 100 ms at the least and up to a second, and no
         // frame is rendered meanwhile. The SDK call alone returns at once, and
         // nothing here needs the new mode in force before the next tick.
-        void switchMode(WiFiMode_t m)
-        {
-#ifdef ESP32
-            WiFi.mode(m);
-#else
-            wifi_set_opmode_current(uint8_t(m));
-#endif
-        }
+        void switchMode(WiFiMode_t m) { wifi_set_opmode_current(uint8_t(m)); }
 
         const __FlashStringHelper* reasonText(uint8_t code)
         {
-            // Codes are the same on both cores (802.11 reason codes plus the
-            // Espressif 200+ range); the words are what the owner needs to hear.
+            // 802.11 reason codes plus the Espressif 200+ range; the words are
+            // what the owner needs to hear.
             switch (code)
             {
             case 2: // AUTH_EXPIRE
@@ -73,16 +64,9 @@ namespace net::wifi
 
         void installReasonHook()
         {
-#ifdef ESP32
-            WiFi.onEvent(
-                [](WiFiEvent_t, WiFiEventInfo_t info)
-                { g_reason.set(uint8_t(info.wifi_sta_disconnected.reason)); },
-                ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
-#else
             // The handler object must outlive the registration, hence static.
             static WiFiEventHandler handler = WiFi.onStationModeDisconnected(
                 [](const WiFiEventStationModeDisconnected& e) { g_reason.set(uint8_t(e.reason)); });
-#endif
         }
 
         void onConnected()
@@ -118,17 +102,11 @@ namespace net::wifi
         WiFi.persistent(true);
         // AP+STA from the start so the panel is reachable while STA is trying.
         WiFi.mode(WIFI_AP_STA);
-#ifndef ESP32
         // Station-only mode lets the SDK open modem sleep ("pm open" in the
         // boot log); with the I2S DMA feeding the strip that ends in a hard
         // hang and a hardware-watchdog reset seconds after the AP is closed.
         WiFi.setSleepMode(WIFI_NONE_SLEEP);
-#endif
-#ifdef ESP32
-        WiFi.setHostname(lampName().c_str());
-#else
         WiFi.hostname(lampName());
-#endif
 
         WiFiConnector.onConnect(onConnected);
         WiFiConnector.onError(onFailed);

@@ -50,12 +50,7 @@ namespace net::ota
         // through a dangling link-output pointer: Exception (0) in sys context
         // on every boot (igmp_tmr -> new_linkoutput, seen on lamp B). OTA by
         // IP address works without it.
-#ifdef ESP32
-        ArduinoOTA.setMdnsEnabled(false);
-        ArduinoOTA.begin();
-#else
         ArduinoOTA.begin(false);
-#endif
         logInfo(F("OTA: слушаю"));
     }
 

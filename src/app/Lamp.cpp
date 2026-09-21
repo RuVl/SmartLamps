@@ -225,9 +225,6 @@ namespace app
     {
         if (info == nullptr) return;
 
-        // Under the arena lock from the first byte to the last, so a walk of
-        // the Param list from the network side never overlaps the rebuild.
-        hal::Guard guard(lock_);
         if (effect_ != nullptr) effect_->~Effect();
         effect_ = nullptr;
 
@@ -249,7 +246,6 @@ namespace app
 
     bool Lamp::setParam(const char* key, int16_t value)
     {
-        hal::Guard guard(lock_);
         if (effect_ == nullptr || info_ == nullptr) return false;
         for (core::Param* p = effect_->params(); p != nullptr; p = p->next())
         {

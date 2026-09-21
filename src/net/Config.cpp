@@ -1,6 +1,6 @@
 #include "Config.h"
 
-#include "WiFiHeader.h"
+#include <ESP8266WiFi.h>
 
 #include "hal/Database.h"
 
