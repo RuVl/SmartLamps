@@ -5,11 +5,11 @@
 
 #include <ArduinoJson.h>
 #include <AsyncMqttClient.h>
+#include <ESP8266WiFi.h>
 #include <atomic>
 #include <string.h>
 
 #include "Config.h"
-#include "WiFiHeader.h"
 #include "Log.h"
 #include "app/Lamp.h"
 #include "core/Registry.h"
@@ -224,8 +224,9 @@ namespace net::mqtt
         db.init(kMqttUser, "");
         db.init(kMqttPass, "");
 
-        // Built once: the callback reads it, and a reassignment from loop()
-        // under its feet would be a race on the ESP32. A renamed lamp restarts.
+        // Built once: the callback reads it from the SDK's sys context, and a
+        // reassignment from loop() under its feet would be a race. A renamed
+        // lamp restarts.
         g_cmdPrefix = topic("cmd/");
 
         client.onConnect(onConnect);

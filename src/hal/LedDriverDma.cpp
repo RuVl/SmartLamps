@@ -1,4 +1,4 @@
-// ESP8266: the strip is driven by I2S DMA through NeoPixelBus.
+// The strip is driven by I2S DMA through NeoPixelBus.
 //
 // FastLED's ESP8266 backend bit-bangs WS2812B and blocks interrupts for about
 // 7.7 ms per frame, which tears async HTTP responses apart. NeoPixelBus hands

@@ -5,12 +5,13 @@
 // effect catalogue. Effects stay ignorant of it; the network layer drives it
 // through the setters and watches it through consumeChanged().
 //
-// On the ESP32-S3 render() runs in its own task while the setters are called
-// from loop(), from the panel's WebSocket callback and from the MQTT client -
-// there is no lock between them but the one on the effect arena. The setters
-// never touch the transition: they store what the owner wants (wantOn_,
-// wantEffect_, single atomic words), and render() compares that with what is
-// on the matrix at the start of every frame and drives the fade itself.
+// render() runs from loop() while the setters are called from loop(), from
+// the panel's WebSocket callback and from the MQTT client - the latter two in
+// the SDK's sys context, which preempts loop(). There is no lock between
+// them. The setters never touch the transition: they store what the owner
+// wants (wantOn_, wantEffect_, single atomic words), and render() compares
+// that with what is on the matrix at the start of every frame and drives the
+// fade itself.
 
 #include <stdint.h>
 
@@ -20,7 +21,6 @@
 #include "core/Matrix.h"
 #include "core/Registry.h"
 #include "hal/Button.h"
-#include "hal/Lock.h"
 
 namespace app
 {
@@ -36,8 +36,8 @@ namespace app
         // Drives everything that is not rendering: button, storage, state.
         void tick(uint32_t nowMs);
 
-        // Renders one frame if one is due. Separate from tick() so the ESP32 can
-        // run it on its own core while tick() keeps the network fed.
+        // Renders one frame if one is due. Separate from tick() so the caller
+        // decides the order: the simulator and loop() both tick first, render last.
         void render(uint32_t nowMs);
 
         // --- state, callable from the button, the panel and MQTT ---
@@ -60,26 +60,17 @@ namespace app
 
         [[nodiscard]] uint16_t effectIndex() const { return effectIndex_; }
 
-        [[nodiscard]] const char* effectName() const
-        {
-            hal::Guard guard(lock_);
-            return info_ ? info_->name : "";
-        }
+        [[nodiscard]] const char* effectName() const { return info_ ? info_->name : ""; }
 
-        // The active effect's parameters, walked under the arena lock; f may
-        // call setParam(). Nothing outside this class holds a Param pointer.
+        // The active effect's parameters; f may call setParam(). Nothing
+        // outside this class holds a Param pointer.
         template <typename F>
         void forEachParam(F&& f) const
         {
-            hal::Guard guard(lock_);
             for (core::Param* p = effect_ ? effect_->params() : nullptr; p != nullptr; p = p->next()) f(*p);
         }
 
-        [[nodiscard]] bool hasParams() const
-        {
-            hal::Guard guard(lock_);
-            return effect_ != nullptr && effect_->params() != nullptr;
-        }
+        [[nodiscard]] bool hasParams() const { return effect_ != nullptr && effect_->params() != nullptr; }
 
         // Sets a parameter of the active effect by key. False if there is none.
         bool setParam(const char* key, int16_t value);
@@ -160,9 +151,7 @@ namespace app
         // --- owned by render() ---
         // The active effect and its Param list live in the arena and are rebuilt
         // by activate(); every walk of the list from the network side goes
-        // through forEachParam()/setParam() and holds lock_ meanwhile, so the
-        // rebuild waits for the walk and the walk never sees a half-built list.
-        mutable hal::Lock lock_;
+        // through forEachParam()/setParam().
         core::Effect* effect_ = nullptr;
         core::EffectInfo* info_ = nullptr;
         core::EffectInfo* pending_ = nullptr; // activated once the fade-out ends

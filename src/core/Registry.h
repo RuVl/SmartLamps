@@ -20,7 +20,6 @@ namespace core
     {
         Ambient, // slow, meant to be lived with
         Dynamic, // fast, meant to be watched
-        Reactive, // driven by the microphone
         System, // notifications, diagnostics
     };
 

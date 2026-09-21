@@ -21,7 +21,7 @@ namespace
             // Simulation runs on its own clock. The lamp renders at a fixed rate,
             // so an effect must never assume "one call == one step" - it advances
             // by the time that actually passed. This is why speed looks the same
-            // on the S3 and on the ESP8266.
+            // on the board and in the simulator, with the web panel open or not.
             const uint16_t stepMs = uint16_t(1000 / (10 + int(speed)));
             accumulator_ += dtMs;
             while (accumulator_ >= stepMs)
