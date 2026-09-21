@@ -5,7 +5,7 @@
 #include <thread>
 
 #include "app/Lamp.h"
-#include "hal/sim/SimFrame.h"
+#include "sim/hal/SimFrame.h"
 
 #include "HttpServer.h"
 
