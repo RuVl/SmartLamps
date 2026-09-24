@@ -222,7 +222,7 @@ namespace net::web
         const String pass = db.get(kPanelPass).toString();
         if (!pass.isEmpty()) settings.setPass(pass);
 
-        settings.setProjectInfo("SmartLamp", "https://github.com/RuVl/SmartLamps");
+        settings.setProjectInfo("SmartLamp", "https://github.com/RuVl/SmartLamp");
         settings.config.sliderTout = kSliderThrottleMs;
         settings.onBuild(build);
         settings.begin();
